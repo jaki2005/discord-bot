@@ -19,7 +19,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import discord
-from anthropic import AsyncAnthropic
 from discord import app_commands
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
@@ -29,29 +28,27 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID", "0")) or None
 
-# --- AI ticket auto-reply settings ---
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
-AI_REPLIES_ENABLED = bool(ANTHROPIC_API_KEY)
-# Role IDs (comma-separated) for staff. Once a staff member posts in a ticket,
-# the AI stops auto-replying there so it never talks over a human.
-STAFF_ROLE_IDS = {
-    int(r) for r in os.getenv("STAFF_ROLE_IDS", "").split(",") if r.strip().isdigit()
-}
-MAX_HISTORY_MESSAGES = 16
-
-KNOWLEDGE_BASE_PATH = Path(__file__).parent / "knowledge_base.md"
-KNOWLEDGE_BASE = KNOWLEDGE_BASE_PATH.read_text() if KNOWLEDGE_BASE_PATH.exists() else ""
-
-SYSTEM_PROMPT = f"""Lu adalah NusaKlip AI, asisten dukungan NusaKlip yang menjawab member di dalam\nchannel tiket privat Discord. Ikuti SEMUA aturan dan gaya bahasa di dokumen\nberikut dengan ketat. Dokumen ini adalah satu-satunya sumber kebenaran lu.\n\n{KNOWLEDGE_BASE}\n\nIngat: lu hanya menjawab di dalam channel tiket. Kalau pertanyaan di luar\ncakupan dokumen ini, atau butuh verifikasi pembayaran, refund, atau tindakan\nmanusia, bilang jujur dan arahkan ke tim (jangan mengarang jawaban)."""
-
-client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY) if AI_REPLIES_ENABLED else None
-
 # --- Welcome / scheduled announcement settings ---
 WELCOME_CHANNEL_ID = int(os.getenv("WELCOME_CHANNEL_ID", "0")) or None
-WELCOME_MESSAGE = os.getenv(
-    "WELCOME_MESSAGE",
-    "👋 Welcome to the community! Introduce yourself and check the pinned posts to get started.",
+RULES_CHANNEL_ID = os.getenv("RULES_CHANNEL_ID", "").strip()
+GUIDE_CHANNEL_ID = os.getenv("GUIDE_CHANNEL_ID", "").strip()
+CAPCUT_CHANNEL_ID = os.getenv("CAPCUT_CHANNEL_ID", "").strip()
+
+
+def _channel_ref(channel_id: str, fallback_name: str) -> str:
+    """Real clickable channel mention if an ID was given, else plain #name text."""
+    return f"<#{channel_id}>" if channel_id else f"#{fallback_name}"
+
+
+WELCOME_MESSAGE = os.getenv("WELCOME_MESSAGE", "").strip() or (
+    "Hallo!! Welcome yang baru join\n"
+    f"Silahkan dibaca dulu untuk {_channel_ref(RULES_CHANNEL_ID, 'rules')}\n\n"
+    f"Kalau udah nanti lanjut {_channel_ref(GUIDE_CHANNEL_ID, 'panduan-gratis-content-rewards')}\n"
+    "Nanti tinggal di download aja ya untuk FAQ nya gratis untuk di pelajari,\n\n"
+    "Dan apabila kalian tertarik kami juga menyediakan Capcut Pro premium tentunya dengan "
+    "garansi 100%, kalo minat silahkan cek disini ya qaqah🥰\n"
+    f"{_channel_ref(CAPCUT_CHANNEL_ID, 'capcut-pro')}\n\n"
+    "Semangat menjadi Dollar🤑🤑"
 )
 WELCOME_INTERVAL_HOURS = float(os.getenv("WELCOME_INTERVAL_HOURS", "24"))
 
@@ -96,64 +93,6 @@ def touch_ticket(channel_id: int) -> None:
         save_data(ticket_data)
 
 
-def append_history(channel_id: int, role: str, content: str) -> None:
-    key = str(channel_id)
-    if key not in ticket_data["tickets"]:
-        return
-    history = ticket_data["tickets"][key].setdefault("history", [])
-    history.append({"role": role, "content": content})
-    del history[:-MAX_HISTORY_MESSAGES]
-    save_data(ticket_data)
-
-
-def is_staff_member(member: discord.Member) -> bool:
-    if not STAFF_ROLE_IDS:
-        return False
-    return any(role.id in STAFF_ROLE_IDS for role in getattr(member, "roles", []))
-
-
-async def maybe_ai_reply(message: discord.Message) -> None:
-    """If AI replies are enabled and no staff member has taken over, answer
-    the member's message in their ticket using the NusaKlip knowledge base."""
-    key = str(message.channel.id)
-    info = ticket_data["tickets"].get(key)
-    if info is None or not AI_REPLIES_ENABLED:
-        return
-
-    if isinstance(message.author, discord.Member) and is_staff_member(message.author):
-        info["staff_engaged"] = True
-        save_data(ticket_data)
-        return
-
-    if info.get("staff_engaged"):
-        # A human took over this ticket; stay quiet.
-        return
-
-    append_history(message.channel.id, "user", message.content)
-
-    async with message.channel.typing():
-        try:
-            response = await client.messages.create(
-                model=ANTHROPIC_MODEL,
-                max_tokens=600,
-                system=SYSTEM_PROMPT,
-                messages=info.get("history", []),
-            )
-            reply_text = "".join(
-                block.text for block in response.content if block.type == "text"
-            ).strip()
-        except Exception as e:
-            print(f"Anthropic API error: {e}")
-            return
-
-    if not reply_text:
-        return
-
-    append_history(message.channel.id, "assistant", reply_text)
-    for chunk_start in range(0, len(reply_text), 1900):
-        await message.channel.send(reply_text[chunk_start : chunk_start + 1900])
-
-
 # ---------------------------------------------------------------------------
 # Events
 # ---------------------------------------------------------------------------
@@ -182,7 +121,6 @@ async def on_message(message: discord.Message):
     # Any message inside a tracked ticket channel resets its inactivity clock
     if str(message.channel.id) in ticket_data["tickets"]:
         touch_ticket(message.channel.id)
-        await maybe_ai_reply(message)
     await bot.process_commands(message)
 
 
@@ -235,24 +173,13 @@ async def ticket(interaction: discord.Interaction):
         "opened_by": interaction.user.id,
         "last_activity": datetime.now(timezone.utc).isoformat(),
         "warned": False,
-        "history": [],
-        "staff_engaged": False,
     }
     save_data(ticket_data)
 
-    intro = (
-        f"🎫 Halo {interaction.user.mention}, makasih udah buka tiket!\n\n"
-        f"Gue NusaKlip AI, bakal bantu jawab pertanyaan lu duluan. Kalau butuh "
-        f"tim manusia (pembayaran, refund, dll), gue teruskan ya.\n\n"
+    await channel.send(
+        f"🎫 Halo {interaction.user.mention}, makasih udah buka tiket! Tim bakal bantu lu di sini.\n\n"
         f"_Tiket ini otomatis ditutup kalau sudah {TICKET_INACTIVITY_HOURS:g} jam nggak ada aktivitas._"
-        if AI_REPLIES_ENABLED
-        else (
-            f"🎫 Hi {interaction.user.mention}, thanks for opening a ticket! "
-            f"A team member will be with you shortly.\n\n"
-            f"_This ticket auto-closes after {TICKET_INACTIVITY_HOURS:g} hours of inactivity._"
-        )
     )
-    await channel.send(intro)
     await interaction.response.send_message(f"Ticket created: {channel.mention}", ephemeral=True)
 
 
