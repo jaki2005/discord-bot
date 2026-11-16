@@ -52,9 +52,7 @@ CLOSE_AFTER_VERIFY_HOURS = float(os.getenv("PURCHASE_CLOSE_AFTER_VERIFY_HOURS", 
 CHECK_MINUTES = float(os.getenv("PURCHASE_CHECK_INTERVAL_MINUTES", "15"))
 PING_COOLDOWN_SECONDS = 30 * 60
 
-# Payment details come from Railway variables (the repo is public).
-# PAYMENT_BANK_TEXT example: "BCA 5356003744 a.n. Muhammad Haikal Dzaky"
-PAYMENT_BANK_TEXT = os.getenv("PAYMENT_BANK_TEXT", "").strip()
+# Payment is QRIS only. The image ships as assets/qris.png; QRIS_IMAGE_URL is a fallback.
 QRIS_IMAGE_URL = os.getenv("QRIS_IMAGE_URL", "").strip()
 QRIS_FILE = Path(__file__).parent / "assets" / "qris.png"
 
@@ -188,7 +186,7 @@ def panel_embed(product: str) -> discord.Embed:
         + "room pembayaran pribadi buat lu."
     )
     e = discord.Embed(title=f"{p['emoji']} {p['name']}", description=desc, color=COLOR)
-    e.set_footer(text="NusaKlip • Pembayaran via QRIS atau transfer BCA")
+    e.set_footer(text="NusaKlip • Pembayaran via QRIS")
     return e
 
 
@@ -358,10 +356,11 @@ def room_embed(product: str, plan: str, member: discord.abc.User, state: dict):
         paket += f"\n• **Perpanjangan:** {info['renewal']}"
     e.add_field(name="📦 Paket yang lu pilih", value=paket, inline=False)
 
-    pay = "Scan QRIS di bawah (bisa GoPay, OVO, DANA, ShopeePay, atau m-banking)"
-    if PAYMENT_BANK_TEXT:
-        pay += f", atau transfer ke:\n**{PAYMENT_BANK_TEXT}**"
-    pay += f"\n\nBayar pas **{price}** ya."
+    pay = (
+        "Scan QRIS di bawah pakai GoPay, OVO, DANA, ShopeePay, atau m-banking apa aja.\n"
+        f"Masukin nominal pas **{price}**, terus screenshot bukti bayarnya.\n"
+        "Pastiin nama merchant-nya **NUSAKLIP, KOMUNITAS CLIPP**."
+    )
     e.add_field(name="💳 Langkah 1: Bayar", value=pay, inline=False)
     e.add_field(
         name="🧾 Langkah 2: Kirim bukti",
@@ -382,7 +381,7 @@ def room_embed(product: str, plan: str, member: discord.abc.User, state: dict):
     )
     e.add_field(
         name="⚠️ Hati-hati penipuan",
-        value="Pembayaran resmi cuma lewat QRIS dan rekening di room ini. "
+        value="Pembayaran resmi cuma lewat QRIS di room ini, nggak ada transfer rekening. "
         "Tim NusaKlip nggak pernah minta password, OTP, atau PIN.",
         inline=False,
     )
@@ -718,7 +717,6 @@ async def akses_cek(interaction: discord.Interaction):
     lines += [
         line("QRIS", QRIS_FILE.exists() or bool(QRIS_IMAGE_URL),
              "ada" if (QRIS_FILE.exists() or QRIS_IMAGE_URL) else "belum ada (QRIS_IMAGE_URL)"),
-        line("Rekening BCA", bool(PAYMENT_BANK_TEXT), PAYMENT_BANK_TEXT or "PAYMENT_BANK_TEXT belum diset"),
         line("Channel log verifikasi", isinstance(log, discord.TextChannel),
              log.mention if log else "PURCHASE_LOG_CHANNEL_ID belum diset (opsional)"),
         line("Channel arsip transkrip", isinstance(arch, discord.TextChannel),

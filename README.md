@@ -48,7 +48,7 @@ I'd suggest Railway first since it needs the least server administration — say
 ## Buka Akses (purchase flow)
 `purchase.py` replaces the ticket bot for purchases.
 
-1. Set the `PURCHASE_*`, `STAFF_ROLE_ID`, `BLUEPRINT_ROLE_ID`, `MENTORING_ROLE_ID`, `PAYMENT_BANK_TEXT` and `QRIS_IMAGE_URL` variables (see `.env.example`).
+1. Set the `PURCHASE_*`, `STAFF_ROLE_ID`, `BLUEPRINT_ROLE_ID`, `MENTORING_ROLE_ID` variables (QRIS image ships in `assets/qris.png`) (see `.env.example`).
 2. Give the bot **Manage Channels** and **Manage Roles**, and drag the NusaKlip AI role **above** the Blueprint and Mentoring roles.
 3. Run `/akses cek` to see what is still missing.
 4. In each product channel run `/akses panel produk:<Blueprint|Mentoring>`.
