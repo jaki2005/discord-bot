@@ -139,44 +139,60 @@ async def on_message(message: discord.Message):
 # ---------------------------------------------------------------------------
 # Scheduled welcome message
 # ---------------------------------------------------------------------------
-@tasks.loop(minutes=10)
-async def post_welcome_message():
-    """Checks every 10 minutes; posts only when the last welcome is older than the interval.
+async def _last_welcome(channel) -> discord.Message | None:
+    async for msg in channel.history(limit=200):
+        if msg.author.id == bot.user.id and msg.content.startswith(WELCOME_MARKER):
+            return msg
+    return None
 
-    Because the timing comes from the channel itself (the bot's last welcome post),
-    restarts and redeploys no longer trigger an extra post.
-    """
+
+async def send_welcome(force: bool = False) -> str:
+    """Post the welcome message if it is due (or always, when force=True). Returns a status."""
     if not WELCOME_CHANNEL_ID:
-        return
+        return "WELCOME_CHANNEL_ID belum diset."
     channel = bot.get_channel(WELCOME_CHANNEL_ID)
     if channel is None:
         print(f"Could not find channel {WELCOME_CHANNEL_ID} for welcome message.")
-        return
-
-    previous = None
+        return "Channel welcome nggak ketemu."
     try:
-        async for msg in channel.history(limit=200):
-            if msg.author.id == bot.user.id and msg.content.startswith(WELCOME_MARKER):
-                previous = msg
-                break
+        previous = await _last_welcome(channel)
     except discord.HTTPException as e:
         print(f"Could not read welcome channel history: {e}")
-        return
+        return "Bot nggak bisa baca riwayat channel welcome."
 
     now = datetime.now(timezone.utc)
-    if previous and now - previous.created_at < timedelta(hours=WELCOME_INTERVAL_HOURS):
-        return
-
+    if not force and previous and now - previous.created_at < timedelta(hours=WELCOME_INTERVAL_HOURS):
+        return "belum waktunya"
     try:
-        await channel.send(WELCOME_MESSAGE)
+        sent = await channel.send(WELCOME_MESSAGE)
     except discord.Forbidden:
         print("Missing permission to send the welcome message in that channel.")
-        return
+        return "Bot nggak punya izin kirim pesan di channel welcome."
     if previous and WELCOME_DELETE_PREVIOUS:
         try:
             await previous.delete()
         except discord.HTTPException:
             pass
+    return f"Terkirim: {sent.jump_url}"
+
+
+@tasks.loop(minutes=10)
+async def post_welcome_message():
+    """Checks every 10 minutes; posts only when the last welcome is older than the interval.
+
+    The timing comes from the channel itself (the bot's last welcome post), so restarts and
+    redeploys never trigger an extra post.
+    """
+    await send_welcome()
+
+
+@bot.tree.command(name="welcome-sekarang", description="Kirim pesan welcome sekarang (jadwal berikutnya dihitung dari sini)")
+@app_commands.default_permissions(manage_guild=True)
+@app_commands.guild_only()
+async def welcome_now(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    status = await send_welcome(force=True)
+    await interaction.followup.send(status, ephemeral=True)
 
 
 @post_welcome_message.before_loop
