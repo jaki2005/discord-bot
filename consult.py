@@ -77,8 +77,8 @@ def ticket_url(user_id: int) -> str:
 
 
 def ticket_owner_from_url(url: str | None) -> int | None:
-    if not url or "k=konsul" not in url:
-        return None
+    if not url or ("k=konsul" not in url and "k=booking" not in url):
+        return None  # also used by booking.py tickets
     q = parse_qs(urlparse(url).query)
     try:
         return int(q["u"][0])

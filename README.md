@@ -63,3 +63,6 @@ Posted every `WELCOME_INTERVAL_HOURS` (default 2) in `WELCOME_CHANNEL_ID`. The b
 
 ## Masa aktif + perpanjang
 `renewal.py`. Every verified purchase/renewal writes a record embed in `PURCHASE_LOG_CHANNEL_ID` (state in its title link). H-`RENEW_REMIND_DAYS` the bot opens a private `perpanjang-<name>` room in `RENEW_CATEGORY_ID` and DMs the member. At `RENEW_REMOVE_HOUR` WIB on the day after the last active day, the product role is removed and `ALUMNI_ROLE_ID` is added. Staff buttons in the renewal room: +30 / +90 days (counted from the old end date), Tambah Waktu 24 Jam, Nggak Lanjut. `/perpanjang panel` posts the self-service panel in `RENEW_CHANNEL_ID`; `/perpanjang daftar` lists active members. Members from the old manual system have no record and are never touched.
+
+## Booking 1-on-1
+`booking.py`. Run `/booking panel` in #booking-1on1. Members with `MENTORING_ROLE_ID` click **BOOKING 1-ON-1** to open a private `booking-<name>` ticket in `BOOKING_CATEGORY_ID` (member + `COACH_ROLE_ID` + `STAFF_ROLE_ID` + bot). The member tags a coach and writes when they're free. After `BOOKING_INACTIVITY_HOURS` idle the bot asks Udah/Belum (Belum tags the coach role); no answer for `BOOKING_FORCE_CLOSE_HOURS` closes it. Transcripts go to `ARCHIVE_CHANNEL_ID`.
