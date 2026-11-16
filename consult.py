@@ -43,7 +43,8 @@ FORCE_CLOSE_HOURS = float(os.getenv("CONSULT_FORCE_CLOSE_HOURS", "12"))
 CHECK_MINUTES = float(os.getenv("CONSULT_CHECK_INTERVAL_MINUTES", "15"))
 # Where off-topic questions get redirected (defaults to the public chat that gets the welcome post)
 REDIRECT_CHANNEL_ID = os.getenv("CONSULT_REDIRECT_CHANNEL_ID", "").strip() or os.getenv("WELCOME_CHANNEL_ID", "").strip()
-IRRELEVANT_CLOSE_SECONDS = 60
+IRRELEVANT_CLOSE_SECONDS = 300
+IRRELEVANT_MARKER = "-# Ticket ini ditutup otomatis dalam"
 
 TOPIC_PREFIX = "💬 Konsultasi"
 REMINDER_MARKER = "⏳ Cek dulu:"
@@ -132,7 +133,7 @@ async def close_as_irrelevant(ch: discord.TextChannel, staff) -> None:
         "**Mentoring Eksklusif**, dan **kendala akses atau pembayaran**.\n\n"
         f"Buat pertanyaan seputar clipping atau campaign, tanya di {redirect_ref()} ya. "
         "Banyak member dan coach yang bisa bantu di sana.\n\n"
-        f"-# Ticket ini ditutup otomatis dalam {IRRELEVANT_CLOSE_SECONDS} detik.",
+        f"{IRRELEVANT_MARKER} {IRRELEVANT_CLOSE_SECONDS // 60:g} menit.",
         allowed_mentions=discord.AllowedMentions(users=True),
     )
     await asyncio.sleep(IRRELEVANT_CLOSE_SECONDS)
@@ -331,6 +332,16 @@ def make_loop(bot):
         for guild in bot.guilds:
             for ch in ticket_channels(guild):
                 try:
+                    # Fallback for "Nggak Relevan" if the bot restarted during the wait.
+                    flagged_at = None
+                    async for m in ch.history(limit=10):
+                        if m.author.bot and IRRELEVANT_MARKER in m.content:
+                            flagged_at = m.created_at
+                            break
+                    if flagged_at:
+                        if now - flagged_at >= timedelta(seconds=IRRELEVANT_CLOSE_SECONDS):
+                            await close_ticket(ch, "nggak relevan")
+                        continue
                     last, reminder_at = await _activity(ch)
                     if reminder_at:
                         if now - reminder_at >= timedelta(hours=FORCE_CLOSE_HOURS):
