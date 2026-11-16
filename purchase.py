@@ -892,9 +892,18 @@ async def akses_cek(interaction: discord.Interaction):
 # ---------------------------------------------------------------------------
 def setup(bot) -> None:
     bot.tree.add_command(akses)
-    for product in PRODUCTS:
-        bot.add_view(PanelView(product))
-    bot.add_view(RoomView())
+
+    # Persistent views must be created inside the running event loop. A View built
+    # before bot.run() starts is born "stopped" and silently ignores every click.
+    original_hook = bot.setup_hook
+
+    async def setup_hook():
+        await original_hook()
+        for product in PRODUCTS:
+            bot.add_view(PanelView(product))
+        bot.add_view(RoomView())
+
+    bot.setup_hook = setup_hook
     loop = make_loop(bot)
 
     async def _start_loop():
