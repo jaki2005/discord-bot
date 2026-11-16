@@ -19,6 +19,7 @@ Members from the old manual system have no record here, so the bot never touches
 
 import io
 import os
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -267,7 +268,57 @@ def open_room_for(guild, user_id: int) -> discord.TextChannel | None:
     return None
 
 
-async def open_renew_room(guild, member, product, record_msg, record_state) -> discord.TextChannel | None:
+EMAIL_RE = r"[^@\s]+@[^@\s]+\.[^@\s]+"
+WHOP_FIELD = "📧 Data WHOP kamu"
+
+
+def whop_value(email: str | None, whop_user: str | None) -> str:
+    if not email:
+        return "Belum diisi. Klik **Isi Data WHOP** dulu ya, dipakai tim buat buka lagi akses materi kamu."
+    return (f"• **Email:** `{email.replace('`', '')}`\n"
+            f"• **Username:** `{(whop_user or 'belum ada').replace('`', '')}`")
+
+
+class WhopForm(discord.ui.Modal, title="Data WHOP buat perpanjangan"):
+    email = discord.ui.TextInput(label="Email WHOP / email terdaftar", max_length=100,
+                                 placeholder="nama@email.com (dipakai buat buka lagi akses materi)")
+    whop_username = discord.ui.TextInput(label="Username WHOP (kosongin kalau belum ada)", required=False,
+                                         max_length=50, placeholder="Username WHOP kamu kalau ada")
+
+    def __init__(self, product: str | None = None):
+        super().__init__()
+        self.product = product  # set when opened from the panel: create the room after submit
+
+    async def on_submit(self, interaction: discord.Interaction):
+        email = self.email.value.strip()
+        if not re.fullmatch(EMAIL_RE, email):
+            await interaction.response.send_message("Format email-nya kayaknya salah. Coba lagi ya.", ephemeral=True)
+            return
+        user = self.whop_username.value.strip()
+        if self.product:
+            await _open_from_panel(interaction, self.product, email, user)
+            return
+        msg, state = await find_room(interaction.channel)
+        if state is None:
+            await interaction.response.send_message("Data room ini nggak kebaca. Tag tim NusaKlip ya.", ephemeral=True)
+            return
+        e = msg.embeds[0]
+        for i, f in enumerate(e.fields):
+            if f.name == WHOP_FIELD:
+                e.set_field_at(i, name=WHOP_FIELD, value=whop_value(email, user), inline=False)
+        if msg.attachments:
+            e.set_image(url=f"attachment://{msg.attachments[0].filename}")
+        await msg.edit(embed=e)
+        await interaction.response.send_message("✅ Data WHOP kamu udah disimpan di room ini.", ephemeral=True)
+
+
+def room_has_whop(msg) -> bool:
+    email, _ = P.room_whop(msg)
+    return email not in ("", "-")
+
+
+async def open_renew_room(guild, member, product, record_msg, record_state,
+                          email: str | None = None, whop_user: str | None = None) -> discord.TextChannel | None:
     category = guild.get_channel(RENEW_CATEGORY_ID) if RENEW_CATEGORY_ID else None
     if not isinstance(category, discord.CategoryChannel):
         return None
@@ -308,10 +359,12 @@ async def open_renew_room(guild, member, product, record_msg, record_state) -> d
         name="💳 Cara perpanjang",
         value=("1. Scan QRIS di bawah, masukin nominal sesuai paket yang kamu pilih\n"
                "2. Upload screenshot bukti bayar di room ini, tulis paketnya (1 Bulan / 3 Bulan)\n"
-               "3. Klik **Udah Bayar, Panggil Staff**\n"
+               "3. Pastiin data WHOP kamu udah diisi (tombol **Isi Data WHOP**)\n"
+               "4. Klik **Udah Bayar, Panggil Staff**\n"
                "Masa aktif baru dihitung dari tanggal habis yang lama, jadi nggak ada hari yang hilang."),
         inline=False,
     )
+    e.add_field(name=WHOP_FIELD, value=whop_value(email, whop_user), inline=False)
     e.add_field(
         name="⏳ Kalau nggak diperpanjang",
         value=(f"Setelah masa aktif habis, role {p['name']} dicabut dan kamu jadi **NusaKlip Alumni**. "
@@ -365,6 +418,25 @@ async def _finish_room(interaction, room_msg, room_state, topic):
         pass
 
 
+def renewed_text(member, product: str, expires: datetime, email: str) -> str:
+    p = P.PRODUCTS[product]
+    parts = [
+        f"✅ Perpanjangan berhasil! Akses **{p['name']}** {member.mention} sekarang aktif sampai "
+        f"**{P.fmt_date_long(expires)}**.",
+        "🎬 **Akses materi di WHOP**\n"
+        "Kalau kamu sempat ke-kick dari WHOP karena masa aktif sebelumnya habis, join lagi ya:\n"
+        f"1. Buka Whop NusaKlip: {P.WHOP_URL}\n"
+        + (f"2. Login pakai email WHOP kamu: `{email}`\n" if email and email != "-" else
+           "2. Login pakai email WHOP kamu\n")
+        + "3. Masuk ke bagian Course, terus klik Full Clipping Blueprint",
+    ]
+    if product == "mentoring":
+        parts.append(f"🧑‍🏫 Bimbingan mentoring tetap di {P.chan_ref(P.BOOKING_CHANNEL_ID, 'booking-1on1')}.")
+    parts.append(f"Kalau ada kendala akses, langsung bikin ticket di {P.chan_ref(P.HELP_CHANNEL_ID, 'bantuan')}.")
+    parts.append("Makasih udah lanjut bareng NusaKlip, semoga makin cuan! 🚀")
+    return "\n\n".join(parts)
+
+
 class RenewView(P.LoggedView):
     def __init__(self):
         super().__init__(timeout=None)
@@ -387,6 +459,10 @@ class RenewView(P.LoggedView):
             await interaction.response.send_message(
                 "Upload dulu screenshot bukti bayar kamu di room ini, baru klik tombol ini lagi ya.", ephemeral=True)
             return
+        if not room_has_whop(msg):
+            await interaction.response.send_message(
+                "Isi dulu data WHOP kamu lewat tombol **Isi Data WHOP**, baru panggil staff ya.", ephemeral=True)
+            return
         now = time.time()
         if now - P._last_ping.get(interaction.channel.id, 0) < P.PING_COOLDOWN_SECONDS:
             await interaction.response.send_message("Staff udah dipanggil barusan, tunggu sebentar ya.", ephemeral=True)
@@ -396,6 +472,17 @@ class RenewView(P.LoggedView):
             f"🔔 {P.staff_mention(interaction.guild)}, <@{state['u']}> udah kirim bukti bayar perpanjangan. Tolong dicek ya.",
             allowed_mentions=discord.AllowedMentions(roles=True, users=False),
         )
+
+    @discord.ui.button(label="Isi Data WHOP", emoji="📧", style=discord.ButtonStyle.secondary,
+                       custom_id="nk:renew:whop", row=0)
+    async def whop(self, interaction, button):
+        msg, state = await _room_or_reply(interaction)
+        if state is None:
+            return
+        if str(interaction.user.id) != state["u"] and not P.is_staff(interaction.user):
+            await interaction.response.send_message("Tombol ini buat pemilik room.", ephemeral=True)
+            return
+        await interaction.response.send_modal(WhopForm())
 
     async def _renew(self, interaction, days: int):
         msg, state = await _room_or_reply(interaction)
@@ -429,13 +516,19 @@ class RenewView(P.LoggedView):
                 await update_record(rec_msg, s="renewed", g=None)
             except discord.HTTPException:
                 pass
-        p = P.PRODUCTS[product]
-        text = (f"✅ Perpanjangan berhasil! Akses **{p['name']}** {member.mention} sekarang aktif sampai "
-                f"**{P.fmt_date_long(expires)}**.\n\nMakasih udah lanjut bareng NusaKlip, semoga makin cuan! 🚀")
-        await interaction.followup.send(text + f"\n\n-# Room ini otomatis ketutup {DONE_CLOSE_HOURS:g} jam lagi.",
+        email, whop_user = P.room_whop(msg)
+        text = renewed_text(member, product, expires, email)
+        await interaction.followup.send(text + f"\n\n-# Room ini otomatis ketutup {DONE_CLOSE_HOURS:g} jam lagi. "
+                                        "Salinan pesan ini juga dikirim ke DM kamu.",
                                         allowed_mentions=discord.AllowedMentions(users=True))
         dm_ok = await dm(member, text)
-        await write_record(guild, member, product, plan, expires, interaction.user, role, kind="perpanjang", dm_ok=dm_ok)
+        if not dm_ok:
+            await interaction.channel.send(
+                f"⚠️ {member.mention}, DM kamu tertutup jadi salinan pesan di atas nggak bisa dikirim. "
+                "Screenshot atau simpan pesan di atas sebelum room ini ketutup ya.",
+                allowed_mentions=discord.AllowedMentions(users=True))
+        await write_record(guild, member, product, plan, expires, interaction.user, role, kind="perpanjang",
+                           email=email, whop_user=whop_user, dm_ok=dm_ok)
         await _finish_room(interaction, msg, state,
                            f"✅ Diperpanjang sampai {P.fmt_date(expires)} • room ketutup otomatis")
 
@@ -587,30 +680,34 @@ def panel_embed() -> discord.Embed:
     return e
 
 
+async def _open_from_panel(interaction, product, email, whop_user):
+    guild, member = interaction.guild, interaction.user
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    rec_msg, rec = await latest_record(guild, member.id, product)
+    try:
+        ch = await open_renew_room(guild, member, product, rec_msg, rec, email, whop_user)
+    except discord.HTTPException as e:
+        ch = None
+        print(f"[renewal] could not open room: {e}", flush=True)
+    if ch is None:
+        await interaction.followup.send("Gagal bikin room perpanjangan. Tag tim NusaKlip ya.", ephemeral=True)
+        return
+    if rec_msg and rec and rec.get("s") in ("active", "grace"):
+        await update_record(rec_msg, rm=ch.id)
+    await interaction.followup.send(f"✅ Room perpanjangan kamu: {ch.mention}", ephemeral=True)
+
+
 class RenewPanel(P.LoggedView):
     def __init__(self):
         super().__init__(timeout=None)
 
     async def _open(self, interaction, product):
-        guild, member = interaction.guild, interaction.user
-        existing = open_room_for(guild, member.id)
+        existing = open_room_for(interaction.guild, interaction.user.id)
         if existing:
             await interaction.response.send_message(f"Kamu masih punya room perpanjangan: {existing.mention}",
                                                     ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True, thinking=True)
-        rec_msg, rec = await latest_record(guild, member.id, product)
-        try:
-            ch = await open_renew_room(guild, member, product, rec_msg, rec)
-        except discord.HTTPException as e:
-            ch = None
-            print(f"[renewal] could not open room: {e}", flush=True)
-        if ch is None:
-            await interaction.followup.send("Gagal bikin room perpanjangan. Tag tim NusaKlip ya.", ephemeral=True)
-            return
-        if rec_msg and rec and rec.get("s") in ("active", "grace"):
-            await update_record(rec_msg, rm=ch.id)
-        await interaction.followup.send(f"✅ Room perpanjangan kamu: {ch.mention}", ephemeral=True)
+        await interaction.response.send_modal(WhopForm(product))
 
     @discord.ui.button(label="Perpanjang Blueprint", emoji="📘", style=discord.ButtonStyle.primary,
                        custom_id="nk:renew:open:blueprint")
