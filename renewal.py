@@ -426,9 +426,7 @@ def renewed_text(member, product: str, expires: datetime, email: str) -> str:
         "🎬 **Akses materi di WHOP**\n"
         "Kalau kamu sempat ke-kick dari WHOP karena masa aktif sebelumnya habis, join lagi ya:\n"
         f"1. Buka Whop NusaKlip: {P.WHOP_URL}\n"
-        + (f"2. Login pakai email WHOP kamu: `{email}`\n" if email and email != "-" else
-           "2. Login pakai email WHOP kamu\n")
-        + "3. Masuk ke bagian Course, terus klik Full Clipping Blueprint",
+        "2. Masuk ke bagian Course, terus klik Full Clipping Blueprint dan isi nama discord kamu",
     ]
     if product == "mentoring":
         parts.append(f"🧑‍🏫 Bimbingan mentoring tetap di {P.chan_ref(P.BOOKING_CHANNEL_ID, 'booking-1on1')}.")
