@@ -101,7 +101,12 @@ async def on_ready():
     print(f"Logged in as {bot.user} (id: {bot.user.id})")
     try:
         if GUILD_ID:
-            synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+            guild_obj = discord.Object(id=GUILD_ID)
+            # Commands are registered globally (no guild= on the decorator),
+            # so they must be copied into the guild before a guild sync will
+            # pick them up — otherwise sync(guild=...) silently syncs 0.
+            bot.tree.copy_global_to(guild=guild_obj)
+            synced = await bot.tree.sync(guild=guild_obj)
         else:
             synced = await bot.tree.sync()
         print(f"Synced {len(synced)} slash command(s)")
@@ -145,6 +150,44 @@ async def post_welcome_message():
 @post_welcome_message.before_loop
 async def before_welcome_loop():
     await bot.wait_until_ready()
+
+
+# ---------------------------------------------------------------------------
+# One-off styled announcements (e.g. "Clip on Content Rewards" style posts)
+# ---------------------------------------------------------------------------
+NUSAKLIP_EMBED_COLOR = 0xF5A623  # matches the bot's orange "N" avatar
+
+
+@bot.tree.command(name="announce", description="Post a styled announcement embed (admin use)")
+@app_commands.describe(
+    title="Embed title (emoji ok, e.g. 'Clip on Content Rewards 🎬')",
+    body="Embed body text",
+    link="Optional link to include under the body",
+    channel="Channel to post in (defaults to the channel you run this in)",
+)
+@app_commands.checks.has_permissions(manage_guild=True)
+async def announce(
+    interaction: discord.Interaction,
+    title: str,
+    body: str,
+    link: str = None,
+    channel: discord.TextChannel = None,
+):
+    target = channel or interaction.channel
+    description = f"{body}\n\n{link}" if link else body
+    embed = discord.Embed(title=title, description=description, color=NUSAKLIP_EMBED_COLOR)
+    await target.send(embed=embed)
+    await interaction.response.send_message(f"Posted in {target.mention}.", ephemeral=True)
+
+
+@announce.error
+async def announce_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.MissingPermissions):
+        await interaction.response.send_message(
+            "You need the Manage Server permission to use this.", ephemeral=True
+        )
+    else:
+        await interaction.response.send_message(f"Something went wrong: {error}", ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
