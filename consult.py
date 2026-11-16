@@ -15,6 +15,7 @@ Konsultasi Akses: simple support tickets inside NusaKlip AI.
   Every ticket is archived (transcript zip) to ARCHIVE_CHANNEL_ID before deletion.
 """
 
+import asyncio
 import io
 import os
 import re
@@ -40,6 +41,9 @@ STAFF_ROLE_ID = _id("STAFF_ROLE_ID")
 INACTIVITY_HOURS = float(os.getenv("CONSULT_INACTIVITY_HOURS", "24"))
 FORCE_CLOSE_HOURS = float(os.getenv("CONSULT_FORCE_CLOSE_HOURS", "12"))
 CHECK_MINUTES = float(os.getenv("CONSULT_CHECK_INTERVAL_MINUTES", "15"))
+# Where off-topic questions get redirected (defaults to the public chat that gets the welcome post)
+REDIRECT_CHANNEL_ID = os.getenv("CONSULT_REDIRECT_CHANNEL_ID", "").strip() or os.getenv("WELCOME_CHANNEL_ID", "").strip()
+IRRELEVANT_CLOSE_SECONDS = 60
 
 TOPIC_PREFIX = "💬 Konsultasi"
 REMINDER_MARKER = "⏳ Cek dulu:"
@@ -115,6 +119,26 @@ async def close_ticket(ch: discord.TextChannel, reason: str) -> bool:
         return False
 
 
+def redirect_ref() -> str:
+    return f"<#{REDIRECT_CHANNEL_ID}>" if REDIRECT_CHANNEL_ID else "#diskusi-clipper"
+
+
+async def close_as_irrelevant(ch: discord.TextChannel, staff) -> None:
+    owner = await ticket_owner(ch)
+    who = f"<@{owner}>" if owner else "Halo"
+    await ch.send(
+        f"Halo {who}, makasih udah nanya! 🙏\n\n"
+        "Ticket **Konsultasi Akses** khusus buat pertanyaan soal **Full Clipping Blueprint**, "
+        "**Mentoring Eksklusif**, dan **kendala akses atau pembayaran**.\n\n"
+        f"Buat pertanyaan seputar clipping atau campaign, tanya di {redirect_ref()} ya. "
+        "Banyak member dan coach yang bisa bantu di sana.\n\n"
+        f"-# Ticket ini ditutup otomatis dalam {IRRELEVANT_CLOSE_SECONDS} detik.",
+        allowed_mentions=discord.AllowedMentions(users=True),
+    )
+    await asyncio.sleep(IRRELEVANT_CLOSE_SECONDS)
+    await close_ticket(ch, f"nggak relevan (ditandai {staff})")
+
+
 class LoggedView(discord.ui.View):
     async def on_error(self, interaction: discord.Interaction, error: Exception, item) -> None:
         print(f"[konsultasi] error on {getattr(item, 'custom_id', item)}: {type(error).__name__}: {error}", flush=True)
@@ -140,7 +164,9 @@ def panel_embed() -> discord.Embed:
             "sebelum gabung? Atau lagi ada **kendala teknis**, misalnya akses WHOP belum kebuka, "
             "role belum masuk, atau pembayaran belum diverifikasi?\n\n"
             "Klik tombol **Konsultasi** di bawah. Bot bakal bukain ticket pribadi buat kamu, "
-            "dan tim admin NusaKlip bakal bales secepatnya."
+            "dan tim admin NusaKlip bakal bales secepatnya.\n\n"
+            f"-# Pertanyaan seputar clipping atau campaign (clip ditolak, payout, dll) tanya di "
+            f"{redirect_ref()} ya, banyak member dan coach yang bisa bantu di sana."
         ),
         color=COLOR,
     )
@@ -244,6 +270,16 @@ class TicketView(LoggedView):
             await interaction.followup.send("Transkrip gagal disimpan, jadi ticket nggak dihapus.", ephemeral=True)
 
 
+    @discord.ui.button(label="Nggak Relevan", emoji="🚫", style=discord.ButtonStyle.danger,
+                       custom_id="nk:kons:irrelevant")
+    async def irrelevant(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_staff(interaction.user):
+            await interaction.response.send_message("Tombol ini cuma buat staff.", ephemeral=True)
+            return
+        await interaction.response.send_message("Oke, ditandai nggak relevan.", ephemeral=True)
+        await close_as_irrelevant(interaction.channel, interaction.user)
+
+
 class ReminderView(LoggedView):
     def __init__(self):
         super().__init__(timeout=None)
@@ -339,6 +375,17 @@ async def konsultasi_panel(interaction: discord.Interaction, channel: discord.Te
         await interaction.response.send_message(f"Bot nggak bisa kirim pesan di {target.mention}.", ephemeral=True)
         return
     await interaction.response.send_message(f"Panel Konsultasi Akses udah dipasang di {target.mention}.", ephemeral=True)
+
+
+@konsultasi.command(name="tidak-relevan", description="Bales sopan + arahkan ke diskusi, lalu tutup ticket ini")
+async def konsultasi_irrelevant(interaction: discord.Interaction):
+    ch = interaction.channel
+    if not (isinstance(ch, discord.TextChannel) and ch.topic and ch.topic.startswith(TOPIC_PREFIX)):
+        await interaction.response.send_message("Command ini cuma bisa dipakai di dalam ticket konsultasi.",
+                                                ephemeral=True)
+        return
+    await interaction.response.send_message("Oke, ditandai nggak relevan.", ephemeral=True)
+    await close_as_irrelevant(ch, interaction.user)
 
 
 def setup(bot) -> None:
