@@ -17,7 +17,8 @@ Buka Akses: purchase flow for NusaKlip products, fully inside NusaKlip AI.
   Every room is archived (transcript zip) to ARCHIVE_CHANNEL_ID before deletion.
 
 The bot never checks payments itself. A human presses Verifikasi.
-All room state lives in the channel topic, so nothing is lost on a Railway redeploy.
+Room state lives in the title link of the bot's first message in each room (not in the
+channel topic, which stays human readable), so nothing is lost on a Railway redeploy.
 """
 
 import io
@@ -26,6 +27,7 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import parse_qs, urlencode, urlparse
 from zoneinfo import ZoneInfo
 
 import discord
@@ -57,6 +59,14 @@ QRIS_IMAGE_URL = os.getenv("QRIS_IMAGE_URL", "").strip()
 QRIS_FILE = Path(__file__).parent / "assets" / "qris.png"
 
 WARNING_MARKER = "⏳ Pengingat:"
+STATE_BASE = "https://nusaklip.online/"
+ROOM_PREFIXES = ("⏳", "✅", "👑")
+
+# Sent after verification (replaces the welcome message staff used to type by hand).
+WHOP_URL = os.getenv("WHOP_URL", "https://whop.com/nusaklip").strip()
+VIP_GUIDE_CHANNEL_ID = os.getenv("VIP_GUIDE_CHANNEL_ID", "").strip()
+BOOKING_CHANNEL_ID = os.getenv("BOOKING_CHANNEL_ID", "").strip()
+HELP_CHANNEL_ID = os.getenv("HELP_CHANNEL_ID", "").strip()
 
 DIV = "\n\u200b\n_________________________\n\n"
 
@@ -182,28 +192,6 @@ def slug(text: str, limit: int = 20) -> str:
     return (s[:limit].strip("-")) or "member"
 
 
-def clean(value: str) -> str:
-    """Values go into the channel topic, which uses | and = as separators."""
-    return value.replace("|", "/").replace("=", "-").replace("\n", " ").strip()[:100]
-
-
-def encode_topic(state: dict) -> str:
-    return "NK|" + "|".join(f"{k}={v}" for k, v in state.items() if v not in (None, ""))
-
-
-def parse_topic(topic: str | None) -> dict | None:
-    if not topic or not topic.startswith("NK|"):
-        return None
-    out = {}
-    for part in topic[3:].split("|"):
-        if "=" in part:
-            k, v = part.split("=", 1)
-            out[k] = v
-    if "u" not in out or out.get("p") not in PRODUCTS:
-        return None
-    return out
-
-
 def is_staff(member: discord.abc.User) -> bool:
     if not isinstance(member, discord.Member):
         return False
@@ -212,24 +200,100 @@ def is_staff(member: discord.abc.User) -> bool:
     return bool(STAFF_ROLE_ID and any(r.id == STAFF_ROLE_ID for r in member.roles))
 
 
+BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli",
+         "Agustus", "September", "Oktober", "November", "Desember"]
+
+
 def fmt_date(dt: datetime) -> str:
-    bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
     d = dt.astimezone(WIB)
-    return f"{d.day} {bulan[d.month - 1]} {d.year}"
+    return f"{d.day} {BULAN[d.month - 1][:3]} {d.year}"
 
 
-def purchase_rooms(guild: discord.Guild) -> list[tuple[discord.TextChannel, dict]]:
-    rooms = []
-    for ch in guild.text_channels:
-        state = parse_topic(ch.topic)
-        if state:
-            rooms.append((ch, state))
-    return rooms
+def fmt_date_long(dt: datetime) -> str:
+    d = dt.astimezone(WIB)
+    return f"{d.day} {BULAN[d.month - 1]} {d.year}"
+
+
+def chan_ref(channel_id: str, name: str) -> str:
+    return f"<#{channel_id}>" if channel_id else f"#{name}"
 
 
 def staff_mention(guild: discord.Guild) -> str:
     role = guild.get_role(STAFF_ROLE_ID) if STAFF_ROLE_ID else None
     return role.mention if role else "tim NusaKlip"
+
+
+# ---------------------------------------------------------------------------
+# Room state: kept in the room message's title link, e.g.
+#   https://nusaklip.online/?nk=1&u=<user id>&p=blueprint&pl=1b&s=pending
+# s: pending | verified | active.  v: verified at (unix).  x: expires (unix).
+# ---------------------------------------------------------------------------
+STATE_KEYS = ("u", "p", "pl", "s", "v", "x")
+
+
+def state_url(state: dict) -> str:
+    q = {"nk": "1", **{k: str(state[k]) for k in STATE_KEYS if state.get(k) not in (None, "")}}
+    return STATE_BASE + "?" + urlencode(q)
+
+
+def parse_state_url(url: str | None) -> dict | None:
+    if not url or "nk=1" not in url:
+        return None
+    q = {k: v[0] for k, v in parse_qs(urlparse(url).query).items()}
+    if "u" not in q or q.get("p") not in PRODUCTS:
+        return None
+    q.pop("nk", None)
+    return q
+
+
+def topic_text(state: dict) -> str:
+    p = PRODUCTS[state["p"]]
+    label = p["plans"].get(state.get("pl", "1b"), {}).get("label", "")
+    paket = f"{p['name']} {label}".strip()
+    status = state.get("s")
+    if status == "active":
+        until = fmt_date(datetime.fromtimestamp(int(state["x"]), timezone.utc)) if state.get("x") else "-"
+        return f"👑 Room mentoring pribadi • {paket} aktif sampai {until}"
+    if status == "verified":
+        until = fmt_date(datetime.fromtimestamp(int(state["x"]), timezone.utc)) if state.get("x") else "-"
+        return f"✅ Akses aktif sampai {until} • {paket} • room ketutup otomatis"
+    return f"⏳ Menunggu pembayaran • {paket}"
+
+
+def room_channels(guild: discord.Guild, prefixes=ROOM_PREFIXES) -> list[discord.TextChannel]:
+    cats = {c for c in (PURCHASE_CATEGORY_ID, MENTORING_CATEGORY_ID) if c}
+    return [
+        ch for ch in guild.text_channels
+        if ch.category_id in cats and ch.topic and ch.topic.startswith(prefixes)
+    ]
+
+
+async def find_room(ch) -> tuple[discord.Message | None, dict | None]:
+    if not isinstance(ch, discord.TextChannel):
+        return None, None
+    async for msg in ch.history(limit=10, oldest_first=True):
+        if msg.author.id == ch.guild.me.id and msg.embeds:
+            state = parse_state_url(msg.embeds[0].url)
+            if state:
+                return msg, state
+    return None, None
+
+
+def room_whop(msg: discord.Message) -> tuple[str, str]:
+    for field in msg.embeds[0].fields:
+        if "WHOP" in field.name:
+            email = re.search(r"Email:\*\* `([^`]*)`", field.value)
+            user = re.search(r"Username:\*\* `([^`]*)`", field.value)
+            return (email.group(1) if email else "-", user.group(1) if user else "-")
+    return "-", "-"
+
+
+async def save_state(msg: discord.Message, state: dict) -> None:
+    e = msg.embeds[0]
+    e.url = state_url(state)
+    if msg.attachments:  # keep the QRIS attachment showing inside the embed
+        e.set_image(url=f"attachment://{msg.attachments[0].filename}")
+    await msg.edit(embed=e)
 
 
 # ---------------------------------------------------------------------------
@@ -254,11 +318,11 @@ class PlanButton(discord.ui.Button):
         self.product, self.plan = product, plan
 
     async def callback(self, interaction: discord.Interaction):
+        uid = interaction.user.id
         existing = next(
             (
-                ch
-                for ch, st in purchase_rooms(interaction.guild)
-                if st.get("u") == str(interaction.user.id) and st.get("s") == "pending"
+                ch for ch in room_channels(interaction.guild, ("⏳",))
+                if any(getattr(t, "id", None) == uid for t in ch.overwrites)
             ),
             None,
         )
@@ -348,20 +412,14 @@ class PurchaseForm(discord.ui.Modal):
                 view_channel=True, send_messages=True, attach_files=True, read_message_history=True,
             )
 
-        state = {
-            "u": member.id,
-            "p": self.product,
-            "pl": self.plan,
-            "s": "pending",
-            "e": clean(email),
-            "wu": clean(self.whop_username.value) if self.whop_username.value.strip() else "",
-        }
+        state = {"u": member.id, "p": self.product, "pl": self.plan, "s": "pending"}
+        whop_user = self.whop_username.value.strip()
         name = f"{PRODUCTS[self.product]['short']}-{self.plan.replace('b', 'bln')}-{slug(member.name)}"
         try:
             room = await category.create_text_channel(
                 name=name,
                 overwrites=overwrites,
-                topic=encode_topic(state),
+                topic=topic_text(state),
                 reason=f"Buka Akses {self.product} {self.plan} oleh {member}",
             )
         except discord.HTTPException as e:
@@ -370,7 +428,7 @@ class PurchaseForm(discord.ui.Modal):
             )
             return
 
-        embed, file = room_embed(self.product, self.plan, member, state)
+        embed, file = room_embed(self.product, self.plan, member, state, email, whop_user)
         kwargs = {"file": file} if file else {}
         await room.send(
             content=f"👋 {member.mention}, room pendaftaran lu udah siap!",
@@ -387,12 +445,13 @@ class PurchaseForm(discord.ui.Modal):
 # ---------------------------------------------------------------------------
 # Private room
 # ---------------------------------------------------------------------------
-def room_embed(product: str, plan: str, member: discord.abc.User, state: dict):
+def room_embed(product, plan, member, state, email, whop_user):
     p = PRODUCTS[product]
     info = p["plans"][plan]
     price = rupiah(info["price"])
     e = discord.Embed(
         title=f"{p['emoji']} {p['name']}: Paket {info['label']}",
+        url=state_url(state),
         description=(
             f"Hai {member.mention}, ini room pendaftaran pribadi lu. "
             "Cuma lu dan tim NusaKlip yang bisa lihat room ini."
@@ -407,13 +466,15 @@ def room_embed(product: str, plan: str, member: discord.abc.User, state: dict):
     if info["renewal"]:
         paket += f"\n• **Perpanjangan:** {info['renewal']}"
     e.add_field(name="📦 Paket yang lu pilih", value=paket, inline=False)
-
-    pay = (
-        "Scan QRIS di bawah pakai GoPay, OVO, DANA, ShopeePay, atau m-banking apa aja.\n"
-        f"Masukin nominal pas **{price}**, terus screenshot bukti bayarnya.\n"
-        "Pastiin nama merchant-nya **NUSAKLIP, KOMUNITAS CLIPP**."
+    e.add_field(
+        name="💳 Langkah 1: Bayar",
+        value=(
+            "Scan QRIS di bawah pakai GoPay, OVO, DANA, ShopeePay, atau m-banking apa aja.\n"
+            f"Masukin nominal pas **{price}**, terus screenshot bukti bayarnya.\n"
+            "Pastiin nama merchant-nya **NUSAKLIP, KOMUNITAS CLIPP**."
+        ),
+        inline=False,
     )
-    e.add_field(name="💳 Langkah 1: Bayar", value=pay, inline=False)
     e.add_field(
         name="🧾 Langkah 2: Kirim bukti",
         value="Upload screenshot bukti bayar langsung di room ini, terus klik **Udah Bayar, Panggil Staff**.",
@@ -421,7 +482,8 @@ def room_embed(product: str, plan: str, member: discord.abc.User, state: dict):
     )
     e.add_field(
         name="📧 Data WHOP lu",
-        value=f"• **Email:** `{state.get('e', '-')}`\n• **Username:** `{state.get('wu') or 'belum ada'}`\n"
+        value=f"• **Email:** `{email.replace('`', '')}`\n"
+        f"• **Username:** `{(whop_user or 'belum ada').replace('`', '')}`\n"
         "(Dipakai tim buat buka akses materi lu.)",
         inline=False,
     )
@@ -448,11 +510,46 @@ def room_embed(product: str, plan: str, member: discord.abc.User, state: dict):
     return e, file
 
 
-async def _room_state(interaction: discord.Interaction) -> dict | None:
-    state = parse_topic(getattr(interaction.channel, "topic", None))
+def welcome_text(member, product: str, plan: str, start: datetime, expires: datetime) -> str:
+    """The thank-you message staff used to send by hand after a purchase."""
+    p = PRODUCTS[product]
+    period = f"dari {fmt_date_long(start)} sampai {fmt_date_long(expires)}"
+    parts = [
+        f"Halo kak {member.mention}, makasih udah beli NusaKlip {p['name']}! 🎉",
+        "Berikut akses kamu:",
+        "🎬 **Full Clipping Blueprint**\n"
+        "Cara aksesnya:\n"
+        f"1. Buka Whop NusaKlip: {WHOP_URL}\n"
+        "2. Masuk ke bagian Course\n"
+        "3. Klik akses ke Full Clipping Blueprint\n"
+        "4. Selesai, langsung mulai belajar"
+        + ("" if product == "mentoring" else f"\nAkses kamu aktif {period}."),
+    ]
+    if product == "mentoring":
+        parts.append(
+            "🧑‍🏫 **Mentoring Eksklusif**\n"
+            f"Akses mentoring kamu aktif {period}.\n"
+            f"Bimbingan langsung ada di channel {chan_ref(BOOKING_CHANNEL_ID, 'booking-1on1')}."
+        )
+    parts += [
+        f"Bisa langsung eksplor channel VIP dari sini dulu ya: {chan_ref(VIP_GUIDE_CHANNEL_ID, 'nusaklip-guide')}",
+        f"Kalau ada kendala pas akses, langsung bikin ticket bantuan disini: {chan_ref(HELP_CHANNEL_ID, 'bantuan')}",
+        "Selamat belajar, semoga cepet cuan! 🚀",
+    ]
+    if product == "mentoring":
+        parts.append("-# Room ini sekarang jadi room mentoring pribadi kamu.")
+    else:
+        parts.append(f"-# Room ini otomatis ketutup {CLOSE_AFTER_VERIFY_HOURS:g} jam lagi.")
+    return "\n\n".join(parts)
+
+
+async def _room_or_reply(interaction: discord.Interaction):
+    msg, state = await find_room(interaction.channel)
     if state is None:
-        await interaction.response.send_message("Ini bukan room pembayaran.", ephemeral=True)
-    return state
+        await interaction.response.send_message(
+            "Data room ini nggak kebaca. Tag tim NusaKlip ya.", ephemeral=True
+        )
+    return msg, state
 
 
 class RoomView(discord.ui.View):
@@ -462,7 +559,7 @@ class RoomView(discord.ui.View):
     @discord.ui.button(label="Udah Bayar, Panggil Staff", emoji="📸",
                        style=discord.ButtonStyle.primary, custom_id="nk:pay:ping")
     async def ping(self, interaction: discord.Interaction, button: discord.ui.Button):
-        state = await _room_state(interaction)
+        msg, state = await _room_or_reply(interaction)
         if state is None:
             return
         if str(interaction.user.id) != state["u"] and not is_staff(interaction.user):
@@ -472,8 +569,8 @@ class RoomView(discord.ui.View):
             await interaction.response.send_message("Akses di room ini udah diverifikasi.", ephemeral=True)
             return
         has_proof = False
-        async for msg in interaction.channel.history(limit=50):
-            if str(msg.author.id) == state["u"] and msg.attachments:
+        async for m in interaction.channel.history(limit=50):
+            if str(m.author.id) == state["u"] and m.attachments:
                 has_proof = True
                 break
         if not has_proof:
@@ -498,7 +595,7 @@ class RoomView(discord.ui.View):
     @discord.ui.button(label="Verifikasi & Buka Akses", emoji="✅",
                        style=discord.ButtonStyle.success, custom_id="nk:pay:verify")
     async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
-        state = await _room_state(interaction)
+        msg, state = await _room_or_reply(interaction)
         if state is None:
             return
         if not is_staff(interaction.user):
@@ -519,7 +616,6 @@ class RoomView(discord.ui.View):
                 "Member ini udah nggak ada di server, role nggak bisa dikasih.", ephemeral=True
             )
             return
-
         role = guild.get_role(role_id_for(product) or 0)
         if role is None:
             await interaction.response.send_message(
@@ -541,56 +637,37 @@ class RoomView(discord.ui.View):
 
         now = datetime.now(timezone.utc)
         expires = now + timedelta(days=info["days"])
-        state.update({"s": "verified", "v": int(now.timestamp()), "x": int(expires.timestamp()),
-                      "by": interaction.user.id})
-
-        edit = {}
         is_mentoring = product == "mentoring"
+        state.update({"s": "active" if is_mentoring else "verified",
+                      "v": int(now.timestamp()), "x": int(expires.timestamp())})
+        try:
+            await save_state(msg, state)
+        except discord.HTTPException as e:
+            print(f"save_state failed in #{interaction.channel.name}: {e}")
+
+        edit = {"topic": topic_text(state)}
         if is_mentoring:
-            state["s"] = "active"
             edit["name"] = f"mentee-{slug(member.name)}"
             mcat = guild.get_channel(MENTORING_CATEGORY_ID) if MENTORING_CATEGORY_ID else None
             if isinstance(mcat, discord.CategoryChannel):
                 edit["category"] = mcat
-        edit["topic"] = encode_topic(state)
         try:
             await interaction.channel.edit(**edit, reason="Pembayaran diverifikasi")
         except discord.HTTPException:
             pass
 
-        done = discord.Embed(
-            title="✅ Pembayaran terverifikasi",
-            description=(
-                f"{member.mention}, akses **{PRODUCTS[product]['name']} ({info['label']})** lu udah aktif "
-                f"sampai **{fmt_date(expires)}**.\n\nRole {role.mention} udah ditambahin. "
-                "Akses materi WHOP lu bakal dikirim tim ke email yang lu isi."
-            ),
-            color=0x2ECC71,
-        )
-        if is_mentoring:
-            done.add_field(
-                name="👑 Room mentoring",
-                value="Room ini sekarang jadi room mentoring pribadi lu. Mentor bakal nyapa lu di sini.",
-                inline=False,
-            )
-        else:
-            done.add_field(
-                name="⏳ Room ini",
-                value=f"Room ini otomatis ketutup {CLOSE_AFTER_VERIFY_HOURS:g} jam lagi. "
-                "Kalau ada yang mau ditanyain, sekarang waktunya.",
-                inline=False,
-            )
-        done.set_footer(text=f"Diverifikasi oleh {interaction.user.display_name}")
         await interaction.followup.send(
-            content=member.mention, embed=done,
+            content=welcome_text(member, product, plan, now, expires),
             allowed_mentions=discord.AllowedMentions(users=True),
         )
-        await _log_verification(guild, member, state, interaction.user, expires)
+        email, whop_user = room_whop(msg)
+        await _log_verification(guild, member, product, plan, email, whop_user,
+                                interaction.user, expires, role)
 
     @discord.ui.button(label="Tutup Room", emoji="❌",
                        style=discord.ButtonStyle.secondary, custom_id="nk:pay:close")
     async def close(self, interaction: discord.Interaction, button: discord.ui.Button):
-        state = await _room_state(interaction)
+        msg, state = await _room_or_reply(interaction)
         if state is None:
             return
         owner = str(interaction.user.id) == state["u"]
@@ -621,19 +698,20 @@ class ConfirmClose(discord.ui.View):
             )
 
 
-async def _log_verification(guild, member, state, staff, expires):
+async def _log_verification(guild, member, product, plan, email, whop_user, staff, expires, role):
     ch = guild.get_channel(PURCHASE_LOG_CHANNEL_ID) if PURCHASE_LOG_CHANNEL_ID else None
     if not isinstance(ch, discord.TextChannel):
         return
-    p = PRODUCTS[state["p"]]
-    info = p["plans"][state.get("pl", "1b")]
+    p = PRODUCTS[product]
+    info = p["plans"][plan]
     e = discord.Embed(title=f"🧾 Akses dibuka: {p['name']} ({info['label']})", color=0x2ECC71)
     e.add_field(name="Member", value=f"{member.mention}\n`{member.id}`")
     e.add_field(name="Harga", value=rupiah(info["price"]))
     e.add_field(name="Aktif sampai", value=fmt_date(expires))
-    e.add_field(name="Email WHOP", value=f"`{state.get('e', '-')}`")
-    e.add_field(name="Username WHOP", value=f"`{state.get('wu') or '-'}`")
-    e.add_field(name="Diverifikasi oleh", value=staff.mention)
+    e.add_field(name="Email WHOP", value=f"`{email}`")
+    e.add_field(name="Username WHOP", value=f"`{whop_user}`")
+    e.add_field(name="Role", value=role.mention)
+    e.set_footer(text=f"Diverifikasi oleh {staff.display_name}")
     try:
         await ch.send(embed=e, allowed_mentions=discord.AllowedMentions.none())
     except discord.HTTPException:
@@ -646,9 +724,9 @@ async def close_room(ch: discord.TextChannel, reason: str) -> bool:
     if not isinstance(target, discord.TextChannel):
         return False
     try:
+        _, state = await find_room(ch)
         data, info = await archive.build_archive(ch, ch.guild.filesize_limit)
-        state = parse_topic(ch.topic) or {}
-        who = f"<@{state['u']}>" if state.get("u") else "-"
+        who = f"<@{state['u']}>" if state else "-"
         await target.send(
             f"🧾 **#{ch.name}** | {info['count']} pesan | member {who} | {reason}",
             file=discord.File(io.BytesIO(data), filename=f"{ch.name}.zip"),
@@ -681,8 +759,11 @@ def make_loop(bot: discord.Client):
     async def purchase_autoclose():
         now = datetime.now(timezone.utc)
         for guild in bot.guilds:
-            for ch, state in purchase_rooms(guild):
+            for ch in room_channels(guild, ("⏳", "✅")):
                 try:
+                    _, state = await find_room(ch)
+                    if state is None:
+                        continue
                     status = state.get("s")
                     if status == "verified":
                         verified = datetime.fromtimestamp(int(state.get("v", 0)), timezone.utc)
@@ -776,11 +857,16 @@ async def akses_cek(interaction: discord.Interaction):
         line("Permission Manage Channels", me.guild_permissions.manage_channels, "wajib"),
         line("Permission Manage Roles", me.guild_permissions.manage_roles, "wajib buat kasih role"),
     ]
+    for label, cid, name in (("Channel panduan VIP", VIP_GUIDE_CHANNEL_ID, "VIP_GUIDE_CHANNEL_ID"),
+                             ("Channel booking mentoring", BOOKING_CHANNEL_ID, "BOOKING_CHANNEL_ID"),
+                             ("Channel bantuan", HELP_CHANNEL_ID, "HELP_CHANNEL_ID")):
+        ch = g.get_channel(int(cid)) if cid.isdigit() else None
+        lines.append(line(label, ch is not None, ch.mention if ch else f"{name} belum diset (pesan sambutan pakai teks biasa)"))
     if MENTORING_CATEGORY_ID:
         mc = g.get_channel(MENTORING_CATEGORY_ID)
         lines.append(line("Kategori room mentoring", isinstance(mc, discord.CategoryChannel),
                           mc.name if mc else "ID salah"))
-    pending = sum(1 for _, s in purchase_rooms(g) if s.get("s") == "pending")
+    pending = len(room_channels(g, ("⏳",)))
     lines.append(f"\nRoom pembayaran yang masih nunggu: **{pending}**")
     await interaction.response.send_message("\n".join(lines), ephemeral=True,
                                             allowed_mentions=discord.AllowedMentions.none())
