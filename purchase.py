@@ -525,7 +525,8 @@ def room_embed(product, plan, member, state, email, whop_user):
     return e, file
 
 
-def welcome_text(member, product: str, plan: str, start: datetime, expires: datetime) -> str:
+def welcome_text(member, product: str, plan: str, start: datetime, expires: datetime,
+                 in_dm: bool = False) -> str:
     """The thank-you message staff used to send by hand after a purchase."""
     p = PRODUCTS[product]
     period = f"dari {fmt_date_long(start)} sampai {fmt_date_long(expires)}"
@@ -552,13 +553,13 @@ def welcome_text(member, product: str, plan: str, start: datetime, expires: date
         f"Kalau ada kendala pas akses, langsung bikin ticket bantuan disini: {chan_ref(HELP_CHANNEL_ID, 'bantuan')}",
         "Selamat belajar, semoga cepet cuan! 🚀",
     ]
-    if product == "mentoring":
-        parts.append(
-            "-# Room ini khusus info dari tim NusaKlip (pengingat masa aktif dan pengumuman), "
-            "jadi kamu nggak bisa chat di sini. Buat coaching atau pertanyaan, pakai ticket bantuan ya."
-        )
+    if in_dm:
+        parts.append("-# Pesan ini disimpan di DM biar kamu bisa buka lagi kapan aja.")
     else:
-        parts.append(f"-# Room ini otomatis ketutup {CLOSE_AFTER_VERIFY_HOURS:g} jam lagi.")
+        parts.append(
+            f"-# Room pembayaran ini otomatis ketutup {CLOSE_AFTER_VERIFY_HOURS:g} jam lagi. "
+            "Salinan pesan ini juga dikirim ke DM kamu."
+        )
     return "\n\n".join(parts)
 
 
@@ -656,43 +657,37 @@ class RoomView(LoggedView):
 
         now = datetime.now(timezone.utc)
         expires = now + timedelta(days=info["days"])
-        is_mentoring = product == "mentoring"
-        state.update({"s": "active" if is_mentoring else "verified",
-                      "v": int(now.timestamp()), "x": int(expires.timestamp())})
+        state.update({"s": "verified", "v": int(now.timestamp()), "x": int(expires.timestamp())})
         try:
             await save_state(msg, state)
         except discord.HTTPException as e:
             print(f"save_state failed in #{interaction.channel.name}: {e}")
 
-        edit = {"topic": topic_text(state)}
-        if is_mentoring:
-            edit["name"] = f"mentee-{slug(member.name)}"
-            mcat = guild.get_channel(MENTORING_CATEGORY_ID) if MENTORING_CATEGORY_ID else None
-            if isinstance(mcat, discord.CategoryChannel):
-                edit["category"] = mcat
         try:
-            await interaction.channel.edit(**edit, reason="Pembayaran diverifikasi")
+            await interaction.channel.edit(topic=topic_text(state), reason="Pembayaran diverifikasi")
         except discord.HTTPException:
             pass
-        if is_mentoring:
-            # Mentee room becomes a one-way broadcast room: member can read, only staff/bot can post.
-            try:
-                await interaction.channel.set_permissions(
-                    member, view_channel=True, read_message_history=True, send_messages=False,
-                    attach_files=False, add_reactions=True, create_public_threads=False,
-                    create_private_threads=False, send_messages_in_threads=False,
-                    reason="Room mentee jadi broadcast only",
-                )
-            except discord.HTTPException as e:
-                print(f"[purchase] could not lock #{interaction.channel.name}: {e}", flush=True)
 
         await interaction.followup.send(
             content=welcome_text(member, product, plan, now, expires),
             allowed_mentions=discord.AllowedMentions(users=True),
         )
+
+        # A copy in DM, so the access steps outlive the room (closed after 24h).
+        dm_ok = True
+        try:
+            await member.send(welcome_text(member, product, plan, now, expires, in_dm=True))
+        except discord.HTTPException:
+            dm_ok = False
+            await interaction.channel.send(
+                f"⚠️ {member.mention}, DM kamu tertutup jadi salinan pesan di atas nggak bisa dikirim. "
+                "Screenshot atau simpan pesan di atas sebelum room ini ketutup ya.",
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+
         email, whop_user = room_whop(msg)
         await _log_verification(guild, member, product, plan, email, whop_user,
-                                interaction.user, expires, role)
+                                interaction.user, expires, role, dm_ok)
 
     @discord.ui.button(label="Tutup Room", emoji="❌",
                        style=discord.ButtonStyle.secondary, custom_id="nk:pay:close")
@@ -728,7 +723,7 @@ class ConfirmClose(discord.ui.View):
             )
 
 
-async def _log_verification(guild, member, product, plan, email, whop_user, staff, expires, role):
+async def _log_verification(guild, member, product, plan, email, whop_user, staff, expires, role, dm_ok=True):
     ch = guild.get_channel(PURCHASE_LOG_CHANNEL_ID) if PURCHASE_LOG_CHANNEL_ID else None
     if not isinstance(ch, discord.TextChannel):
         return
@@ -741,6 +736,7 @@ async def _log_verification(guild, member, product, plan, email, whop_user, staf
     e.add_field(name="Email WHOP", value=f"`{email}`")
     e.add_field(name="Username WHOP", value=f"`{whop_user}`")
     e.add_field(name="Role", value=role.mention)
+    e.add_field(name="DM sambutan", value="✅ terkirim" if dm_ok else "⚠️ gagal (DM member tertutup)")
     e.set_footer(text=f"Diverifikasi oleh {staff.display_name}")
     try:
         await ch.send(embed=e, allowed_mentions=discord.AllowedMentions.none())
