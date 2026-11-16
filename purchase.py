@@ -545,8 +545,7 @@ def welcome_text(member, product: str, plan: str, start: datetime, expires: date
         parts.append(
             "🧑‍🏫 **Mentoring Eksklusif**\n"
             f"Akses mentoring kamu aktif {period}.\n"
-            f"Mau sesi coaching? Bikin ticket di {chan_ref(HELP_CHANNEL_ID, 'bantuan')}, "
-            "nanti coach yang pegang."
+            f"Bimbingan langsung ada di channel {chan_ref(BOOKING_CHANNEL_ID, 'booking-1on1')}."
         )
     parts += [
         f"Bisa langsung eksplor channel VIP dari sini dulu ya: {chan_ref(VIP_GUIDE_CHANNEL_ID, 'nusaklip-guide')}",
