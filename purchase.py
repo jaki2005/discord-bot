@@ -78,8 +78,10 @@ PRODUCTS = {
         "emoji": "📘",
         "role_env": "BLUEPRINT_ROLE_ID",
         "plans": {
-            "1b": {"label": "1 Bulan", "price": 229_000, "days": 30, "renewal": "Rp199.000 per bulan"},
-            "3b": {"label": "3 Bulan", "price": 389_000, "days": 90, "renewal": "Rp100.000 per 3 bulan"},
+            "1b": {"label": "1 Bulan", "price": 229_000, "days": 30, "renewal": "Rp199.000 per bulan",
+                   "renew_price": 199_000, "renew_was": 249_000},
+            "3b": {"label": "3 Bulan", "price": 389_000, "days": 90, "renewal": "Rp100.000 per 3 bulan",
+                   "renew_price": 100_000, "renew_was": 450_000},
         },
         "panel_title": "📘 Full Clipping Blueprint (ELITE CLASS)",
         "panel": (
@@ -143,8 +145,10 @@ PRODUCTS = {
         "emoji": "👑",
         "role_env": "MENTORING_ROLE_ID",
         "plans": {
-            "1b": {"label": "1 Bulan", "price": 389_000, "days": 30, "renewal": "Rp389.000 per bulan"},
-            "3b": {"label": "3 Bulan", "price": 829_000, "days": 90, "renewal": "Rp829.000 per 3 bulan"},
+            "1b": {"label": "1 Bulan", "price": 389_000, "days": 30, "renewal": "Rp389.000 per bulan",
+                   "renew_price": 389_000},
+            "3b": {"label": "3 Bulan", "price": 829_000, "days": 90, "renewal": "Rp829.000 per 3 bulan",
+                   "renew_price": 829_000},
         },
         "panel_title": "👑 NusaKlip: MENTORING EKSKLUSIF",
         "panel": (

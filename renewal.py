@@ -13,7 +13,7 @@ Timeline for one record (x = last active day, matching the old "username-nov-17"
                               product role removed, ALUMNI_ROLE_ID added, member DM'd
 Renewal room (also opened from the panel in RENEW_CHANNEL_ID):
     member: Udah Bayar, Panggil Staff
-    staff:  Perpanjang +30 hari / +90 hari, Grace +24 jam, Churned, Tutup Room
+    staff:  Perpanjang +30 hari / +90 hari, Tambah Waktu 24 Jam, Nggak Lanjut, Tutup Room
 Members from the old manual system have no record here, so the bot never touches them.
 """
 
@@ -43,10 +43,10 @@ GREEN, GREY = 0x2ECC71, 0x95A5A6
 STATUS_TEXT = {
     "active": "🟢 Aktif",
     "reminded": "🟡 Aktif, room perpanjangan udah dibuka",
-    "grace": "🟠 Grace",
+    "grace": "🟠 Waktu tambahan",
     "expired": "🔴 Berakhir, role dicabut (jadi Alumni)",
     "renewed": "🔁 Diperpanjang (lihat catatan baru)",
-    "churned": "⚫ Nggak lanjut (Churned)",
+    "churned": "⚫ Nggak lanjut",
 }
 LIVE = ("active", "reminded", "grace")
 
@@ -303,8 +303,7 @@ async def open_renew_room(guild, member, product, record_msg, record_state) -> d
                          "Mau lanjut lagi? Perpanjang lewat room ini ya.")
     else:
         e.description = f"Hai {member.mention}, mau perpanjang **{p['name']}**? Lewat room ini ya."
-    prices = "\n".join(f"• **{info['label']}**: {info['renewal']}" for info in p["plans"].values() if info["renewal"])
-    e.add_field(name="💰 Harga perpanjangan", value=prices or "-", inline=False)
+    e.add_field(name="💰 Harga perpanjangan", value=renew_price_lines(product), inline=False)
     e.add_field(
         name="💳 Cara perpanjang",
         value=("1. Scan QRIS di bawah, masukin nominal sesuai paket yang kamu pilih\n"
@@ -450,7 +449,7 @@ class RenewView(P.LoggedView):
     async def renew90(self, interaction, button):
         await self._renew(interaction, 90)
 
-    @discord.ui.button(label=f"Grace +{GRACE_HOURS:g} jam", emoji="⏳", style=discord.ButtonStyle.secondary,
+    @discord.ui.button(label=f"Tambah Waktu {GRACE_HOURS:g} Jam", emoji="⏳", style=discord.ButtonStyle.secondary,
                        custom_id="nk:renew:grace", row=1)
     async def grace(self, interaction, button):
         msg, state = await _room_or_reply(interaction)
@@ -466,7 +465,7 @@ class RenewView(P.LoggedView):
         await interaction.response.defer()
         until = datetime.now(timezone.utc) + timedelta(hours=GRACE_HOURS)
         try:
-            await make_active(member, state["p"], f"Grace oleh {interaction.user}")
+            await make_active(member, state["p"], f"Tambah waktu oleh {interaction.user}")
         except discord.Forbidden:
             await interaction.followup.send("Bot nggak bisa ubah role. Cek urutan role NusaKlip AI.")
             return
@@ -477,14 +476,14 @@ class RenewView(P.LoggedView):
             allowed_mentions=discord.AllowedMentions(users=True),
         )
 
-    @discord.ui.button(label="Churned", emoji="⚫", style=discord.ButtonStyle.danger,
+    @discord.ui.button(label="Nggak Lanjut", emoji="⚫", style=discord.ButtonStyle.danger,
                        custom_id="nk:renew:churn", row=1)
     async def churn(self, interaction, button):
         msg, state = await _room_or_reply(interaction)
         if state is None or not await _staff_or_reply(interaction):
             return
         await interaction.response.send_message(
-            "Yakin member ini nggak lanjut? Role-nya dicabut sekarang dan dia jadi Alumni.",
+            "Yakin member ini nggak lanjut? Role-nya dicabut sekarang dan dia jadi NusaKlip Alumni.",
             view=ConfirmChurn(interaction.user.id), ephemeral=True,
         )
 
@@ -506,7 +505,7 @@ class ConfirmChurn(discord.ui.View):
         super().__init__(timeout=60)
         self.user_id = user_id
 
-    @discord.ui.button(label="Ya, churned", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Ya, nggak lanjut", style=discord.ButtonStyle.danger)
     async def yes(self, interaction, button):
         if interaction.user.id != self.user_id:
             return
@@ -519,7 +518,7 @@ class ConfirmChurn(discord.ui.View):
         product = state["p"]
         if member:
             try:
-                await make_alumni(member, product, f"Churned oleh {interaction.user}")
+                await make_alumni(member, product, f"Nggak lanjut, dikonfirmasi {interaction.user}")
             except discord.Forbidden:
                 await interaction.followup.send("Bot nggak bisa ubah role. Cek urutan role NusaKlip AI.", ephemeral=True)
                 return
@@ -539,16 +538,53 @@ class ConfirmChurn(discord.ui.View):
 # ---------------------------------------------------------------------------
 # Panel in #perpanjang-akses
 # ---------------------------------------------------------------------------
+RETAINED = (
+    "🌐 Komunitas eksklusif & support penuh\n"
+    "🎬 Semua materi Full Clipping Blueprint\n"
+    "📋 Review clip rutin oleh coach\n"
+    "🤝 Akses langsung ke para top earner\n"
+    "💎 2 webinar + 2 Live Q&A per bulan, plus semua rekamannya\n"
+    "💼 Akses prioritas & update campaign eksklusif\n"
+    "🎒 Asset packs & giveaway eksklusif"
+)
+
+
+def renew_price_lines(product: str) -> str:
+    lines = []
+    for info in P.PRODUCTS[product]["plans"].values():
+        line = f"• {info['label']}: **{P.rupiah(info['renew_price'])}**"
+        if info.get("renew_was"):
+            line += f" ~~{P.rupiah(info['renew_was'])}~~"
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def panel_embed() -> discord.Embed:
-    return discord.Embed(
+    e = discord.Embed(
         title="🔄 Perpanjang Akses",
         description=(
-            "Akses **Full Clipping Blueprint** atau **Mentoring Eksklusif** kamu udah habis atau mau habis?\n\n"
-            "Klik tombol produknya di bawah. Bot bakal bukain room perpanjangan pribadi buat kamu, "
-            "lengkap sama harga perpanjangan dan QRIS-nya."
+            "Masa aktif kamu hampir berakhir atau udah habis? Jangan sampai kehilangan momentum, "
+            "perpanjang sekarang."
         ),
         color=P.COLOR,
     )
+    e.add_field(name="⭐ Yang kamu pertahankan", value="\n".join("• " + x for x in RETAINED.split("\n")),
+                inline=False)
+    e.add_field(
+        name="💰 Harga perpanjangan",
+        value=(f"🎬 **Full Clipping Blueprint**\n{renew_price_lines('blueprint')}\n\n"
+               f"👑 **Mentoring Eksklusif**\n{renew_price_lines('mentoring')}"),
+        inline=False,
+    )
+    e.add_field(
+        name="📝 Cara perpanjang",
+        value=("Klik tombol produk kamu di bawah. Bot bakal bukain room perpanjangan pribadi, "
+               "lengkap sama QRIS-nya. Masa aktif baru dihitung dari tanggal habis yang lama, "
+               "jadi nggak ada hari yang hilang."),
+        inline=False,
+    )
+    e.set_footer(text="NusaKlip • Pembayaran via QRIS")
+    return e
 
 
 class RenewPanel(P.LoggedView):
