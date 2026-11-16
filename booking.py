@@ -104,11 +104,11 @@ KINDS = {
         done_text="Sip, ticket ditutup. Makasih udah booking 1-on-1! 🙏",
     ),
     "bantuan": Kind(
-        key="bantuan", cid="help", topic="🌟 Bantuan VIP", name_prefix="bantuan",
+        key="bantuan", cid="help", topic="🌟 Bantuan Exclusive", name_prefix="bantuan",
         category_env="BANTUAN_CATEGORY_ID", role_envs=("BLUEPRINT_ROLE_ID", "MENTORING_ROLE_ID"),
         inactivity_env="BANTUAN_INACTIVITY_HOURS", force_env="BANTUAN_FORCE_CLOSE_HOURS",
         color=0xE74C3C,
-        panel_title="🌟 Bantuan VIP",
+        panel_title="🌟 Bantuan Exclusive",
         panel_text=(
             "Halo temen-temen! Punya kendala atau pertanyaan seputar materi?\n\n"
             "Klik tombol di bawah untuk terhubung langsung dengan Tim Staf lewat jalur prioritas. "
@@ -118,8 +118,8 @@ KINDS = {
             "2. Klik tombol **Panggil Coach**, nanti NusaKlip AI yang ngetag coach"
         ),
         button_label="BUAT BANTUAN", button_emoji="🌟", button_style=discord.ButtonStyle.danger,
-        deny_text="Bantuan VIP khusus buat member **Full Clipping Blueprint** atau **Mentoring Eksklusif** ya.",
-        ticket_title="🌟 Bantuan VIP",
+        deny_text="Bantuan Exclusive khusus buat member **Full Clipping Blueprint** atau **Mentoring Eksklusif** ya.",
+        ticket_title="🌟 Bantuan Exclusive",
         ticket_text=(
             "Halo {member}! Ticket bantuan kamu udah kebuka.\n\n"
             "**Biar cepat dibantu:**\n"
@@ -358,7 +358,7 @@ def _panel_group(kind: Kind, name: str, label: str) -> app_commands.Group:
 
 
 booking = _panel_group(KINDS["booking"], "booking", "Booking 1-on-1")
-bantuan = _panel_group(KINDS["bantuan"], "bantuan", "Bantuan VIP")
+bantuan = _panel_group(KINDS["bantuan"], "bantuan", "Bantuan Exclusive")
 
 
 def setup(bot) -> None:

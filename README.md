@@ -67,5 +67,5 @@ Posted every `WELCOME_INTERVAL_HOURS` (default 2) in `WELCOME_CHANNEL_ID`. The b
 ## Booking 1-on-1
 `booking.py`. Run `/booking panel` in #booking-1on1. Members with `MENTORING_ROLE_ID` click **BOOKING 1-ON-1** to open a private `booking-<name>` ticket in `BOOKING_CATEGORY_ID` (member + `COACH_ROLE_ID` + `STAFF_ROLE_ID` + bot). The member tags a coach and writes when they're free. After `BOOKING_INACTIVITY_HOURS` idle the bot asks Udah/Belum (Belum tags the coach role); no answer for `BOOKING_FORCE_CLOSE_HOURS` closes it. Transcripts go to `ARCHIVE_CHANNEL_ID`.
 
-## Bantuan VIP
+## Bantuan Exclusive
 Same engine as Booking 1-on-1 (`booking.py`, kind `bantuan`). Run `/bantuan panel` in #bantuan. Members with `BLUEPRINT_ROLE_ID` or `MENTORING_ROLE_ID` click **BUAT BANTUAN** to open a private `bantuan-<name>` ticket in `BANTUAN_CATEGORY_ID` (member + coach + staff + bot), with **Panggil Coach** and **Selesai, tutup ticket** buttons and the same Udah/Belum auto-close.
