@@ -132,7 +132,7 @@ async def close_as_irrelevant(ch: discord.TextChannel, staff) -> None:
         "Ticket **Konsultasi Akses** khusus buat pertanyaan soal **Full Clipping Blueprint**, "
         "**Mentoring Eksklusif**, dan **kendala akses atau pembayaran**.\n\n"
         f"Buat pertanyaan seputar clipping atau campaign, tanya di {redirect_ref()} ya. "
-        "Banyak member dan coach yang bisa bantu di sana.\n\n"
+        "Banyak member lain yang bisa bantu di sana.\n\n"
         f"{IRRELEVANT_MARKER} {IRRELEVANT_CLOSE_SECONDS // 60:g} menit.",
         allowed_mentions=discord.AllowedMentions(users=True),
     )
@@ -167,7 +167,7 @@ def panel_embed() -> discord.Embed:
             "Klik tombol **Konsultasi** di bawah. Bot bakal bukain ticket pribadi buat kamu, "
             "dan tim admin NusaKlip bakal bales secepatnya.\n\n"
             f"-# Pertanyaan seputar clipping atau campaign (clip ditolak, payout, dll) tanya di "
-            f"{redirect_ref()} ya, banyak member dan coach yang bisa bantu di sana."
+            f"{redirect_ref()} ya, banyak member lain yang bisa bantu di sana."
         ),
         color=COLOR,
     )
