@@ -43,3 +43,10 @@ I'd suggest Railway first since it needs the least server administration — say
 - Every non-bot message inside a tracked ticket channel resets its inactivity timer.
 - A background loop checks all open tickets on an interval (`TICKET_CHECK_INTERVAL_MINUTES`), posts one warning before closing, then deletes the channel once the inactivity threshold is hit.
 - The welcome message loop posts on a fixed interval from whenever the bot starts; it does not currently post at a fixed clock time (e.g. "every day at 9am") — ask if you want that instead, it's a small change.
+
+## AI auto-replies in tickets (NusaKlip knowledge base)
+- `knowledge_base.md` holds everything the AI is allowed to say about NusaKlip (products, prices, how to buy, escalation rules, tone). It's loaded as the system prompt on every reply. **Keep it updated** — if prices or policy change, edit this file and redeploy; the bot never makes facts up beyond what's in here.
+- Set `ANTHROPIC_API_KEY` in `.env` (from console.anthropic.com) to turn this on. Leave it blank and the bot still works, just without AI replies in tickets.
+- Set `STAFF_ROLE_IDS` to the Discord role ID(s) for your team (e.g. Keanu's staff role). The moment someone with that role posts in a ticket, the AI goes quiet in that ticket so it never talks over a human.
+- The AI only replies inside ticket channels, never in public channels — matches what you asked for.
+- Each ticket keeps its own short conversation history (last ~16 messages) so the AI has context within that ticket, separate from other tickets.
