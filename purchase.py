@@ -254,7 +254,7 @@ def topic_text(state: dict) -> str:
     status = state.get("s")
     if status == "active":
         until = fmt_date(datetime.fromtimestamp(int(state["x"]), timezone.utc)) if state.get("x") else "-"
-        return f"👑 Room mentoring pribadi • {paket} aktif sampai {until}"
+        return f"👑 Info mentee (khusus pengumuman) • {paket} aktif sampai {until}"
     if status == "verified":
         until = fmt_date(datetime.fromtimestamp(int(state["x"]), timezone.utc)) if state.get("x") else "-"
         return f"✅ Akses aktif sampai {until} • {paket} • room ketutup otomatis"
@@ -544,7 +544,8 @@ def welcome_text(member, product: str, plan: str, start: datetime, expires: date
         parts.append(
             "🧑‍🏫 **Mentoring Eksklusif**\n"
             f"Akses mentoring kamu aktif {period}.\n"
-            f"Bimbingan langsung ada di channel {chan_ref(BOOKING_CHANNEL_ID, 'booking-1on1')}."
+            f"Mau sesi coaching? Bikin ticket di {chan_ref(HELP_CHANNEL_ID, 'bantuan')}, "
+            "nanti coach yang pegang."
         )
     parts += [
         f"Bisa langsung eksplor channel VIP dari sini dulu ya: {chan_ref(VIP_GUIDE_CHANNEL_ID, 'nusaklip-guide')}",
@@ -552,7 +553,10 @@ def welcome_text(member, product: str, plan: str, start: datetime, expires: date
         "Selamat belajar, semoga cepet cuan! 🚀",
     ]
     if product == "mentoring":
-        parts.append("-# Room ini sekarang jadi room mentoring pribadi kamu.")
+        parts.append(
+            "-# Room ini khusus info dari tim NusaKlip (pengingat masa aktif dan pengumuman), "
+            "jadi kamu nggak bisa chat di sini. Buat coaching atau pertanyaan, pakai ticket bantuan ya."
+        )
     else:
         parts.append(f"-# Room ini otomatis ketutup {CLOSE_AFTER_VERIFY_HOURS:g} jam lagi.")
     return "\n\n".join(parts)
@@ -670,6 +674,17 @@ class RoomView(LoggedView):
             await interaction.channel.edit(**edit, reason="Pembayaran diverifikasi")
         except discord.HTTPException:
             pass
+        if is_mentoring:
+            # Mentee room becomes a one-way broadcast room: member can read, only staff/bot can post.
+            try:
+                await interaction.channel.set_permissions(
+                    member, view_channel=True, read_message_history=True, send_messages=False,
+                    attach_files=False, add_reactions=True, create_public_threads=False,
+                    create_private_threads=False, send_messages_in_threads=False,
+                    reason="Room mentee jadi broadcast only",
+                )
+            except discord.HTTPException as e:
+                print(f"[purchase] could not lock #{interaction.channel.name}: {e}", flush=True)
 
         await interaction.followup.send(
             content=welcome_text(member, product, plan, now, expires),
