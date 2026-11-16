@@ -31,8 +31,12 @@ GUILD_ID = int(os.getenv("GUILD_ID", "0")) or None
 # --- Welcome / scheduled announcement settings ---
 WELCOME_CHANNEL_ID = int(os.getenv("WELCOME_CHANNEL_ID", "0")) or None
 RULES_CHANNEL_ID = os.getenv("RULES_CHANNEL_ID", "").strip()
-GUIDE_CHANNEL_ID = os.getenv("GUIDE_CHANNEL_ID", "").strip()
+GUIDE_CHANNEL_ID = os.getenv("GUIDE_CHANNEL_ID", "").strip()  # panduan gratis
 CAPCUT_CHANNEL_ID = os.getenv("CAPCUT_CHANNEL_ID", "").strip()
+CONTENT_REWARDS_CHANNEL_ID = os.getenv("CONTENT_REWARDS_CHANNEL_ID", "").strip()
+BLUEPRINT_CHANNEL_ID = os.getenv("BLUEPRINT_CHANNEL_ID", "").strip()
+MENTORING_CHANNEL_ID = os.getenv("MENTORING_CHANNEL_ID", "").strip()
+CONSULT_CHANNEL_ID = os.getenv("CONSULT_CHANNEL_ID", "").strip()
 
 
 def _channel_ref(channel_id: str, fallback_name: str) -> str:
@@ -40,17 +44,26 @@ def _channel_ref(channel_id: str, fallback_name: str) -> str:
     return f"<#{channel_id}>" if channel_id else f"#{fallback_name}"
 
 
-WELCOME_MESSAGE = os.getenv("WELCOME_MESSAGE", "").strip() or (
-    "Hallo!! Welcome yang baru join\n"
-    f"Silahkan dibaca dulu untuk {_channel_ref(RULES_CHANNEL_ID, 'rules')}\n\n"
-    f"Kalau udah nanti lanjut {_channel_ref(GUIDE_CHANNEL_ID, 'panduan-gratis-content-rewards')}\n"
-    "Nanti tinggal di download aja ya untuk FAQ nya gratis untuk di pelajari,\n\n"
-    "Dan apabila kalian tertarik kami juga menyediakan Capcut Pro premium tentunya dengan "
-    "garansi 100%, kalo minat silahkan cek disini ya qaqah🥰\n"
-    f"{_channel_ref(CAPCUT_CHANNEL_ID, 'capcut-pro')}\n\n"
+WELCOME_MARKER = "Hallo!! Welcome"  # how the bot recognises its own previous welcome post
+WELCOME_MESSAGE = os.getenv("WELCOME_MESSAGE", "").strip().replace("\\n", "\n") or (
+    "Hallo!! Welcome buat yang baru join NusaKlip 👋\n\n"
+    "Biar nggak bingung, mulai dari sini ya:\n"
+    f"1️⃣ Baca dulu aturan server di {_channel_ref(RULES_CHANNEL_ID, 'rules')}\n"
+    f"2️⃣ Daftar Content Rewards lewat {_channel_ref(CONTENT_REWARDS_CHANNEL_ID, 'daftar-content-rewards')}\n"
+    f"3️⃣ Pelajari panduan gratisnya di {_channel_ref(GUIDE_CHANNEL_ID, 'panduan-gratis-content-rewards')}, "
+    "FAQ-nya tinggal download, gratis buat dipelajari\n\n"
+    "Mau belajar lebih serius dan dibimbing langsung?\n"
+    f"📘 Full Clipping Blueprint: {_channel_ref(BLUEPRINT_CHANNEL_ID, 'full-clipping-blueprint')}\n"
+    f"👑 Mentoring Eksklusif: {_channel_ref(MENTORING_CHANNEL_ID, 'mentoring-ekslusif')}\n"
+    f"💬 Masih bingung pilih yang mana? Tanya admin di {_channel_ref(CONSULT_CHANNEL_ID, 'konsultasi-akses')}\n\n"
+    "✂️ Butuh CapCut Pro premium? Ada yang bergaransi 100%, cek di "
+    f"{_channel_ref(CAPCUT_CHANNEL_ID, 'capcut-pro')} ya qaqah🥰\n\n"
     "Semangat menjadi Dollar🤑🤑"
 )
-WELCOME_INTERVAL_HOURS = float(os.getenv("WELCOME_INTERVAL_HOURS", "24"))
+WELCOME_INTERVAL_HOURS = float(os.getenv("WELCOME_INTERVAL_HOURS", "2"))
+# Delete the previous welcome post when a new one goes out, so a busy public chat only
+# ever shows the latest one. Set to "false" to keep them all.
+WELCOME_DELETE_PREVIOUS = os.getenv("WELCOME_DELETE_PREVIOUS", "true").strip().lower() != "false"
 
 # --- Ticket settings ---
 TICKET_CATEGORY_ID = int(os.getenv("TICKET_CATEGORY_ID", "0")) or None
@@ -132,19 +145,44 @@ async def on_message(message: discord.Message):
 # ---------------------------------------------------------------------------
 # Scheduled welcome message
 # ---------------------------------------------------------------------------
-@tasks.loop(hours=WELCOME_INTERVAL_HOURS)
+@tasks.loop(minutes=10)
 async def post_welcome_message():
+    """Checks every 10 minutes; posts only when the last welcome is older than the interval.
+
+    Because the timing comes from the channel itself (the bot's last welcome post),
+    restarts and redeploys no longer trigger an extra post.
+    """
     if not WELCOME_CHANNEL_ID:
-        print("WELCOME_CHANNEL_ID not set, skipping scheduled welcome message.")
         return
     channel = bot.get_channel(WELCOME_CHANNEL_ID)
     if channel is None:
         print(f"Could not find channel {WELCOME_CHANNEL_ID} for welcome message.")
         return
+
+    previous = None
+    try:
+        async for msg in channel.history(limit=200):
+            if msg.author.id == bot.user.id and msg.content.startswith(WELCOME_MARKER):
+                previous = msg
+                break
+    except discord.HTTPException as e:
+        print(f"Could not read welcome channel history: {e}")
+        return
+
+    now = datetime.now(timezone.utc)
+    if previous and now - previous.created_at < timedelta(hours=WELCOME_INTERVAL_HOURS):
+        return
+
     try:
         await channel.send(WELCOME_MESSAGE)
     except discord.Forbidden:
         print("Missing permission to send the welcome message in that channel.")
+        return
+    if previous and WELCOME_DELETE_PREVIOUS:
+        try:
+            await previous.delete()
+        except discord.HTTPException:
+            pass
 
 
 @post_welcome_message.before_loop
