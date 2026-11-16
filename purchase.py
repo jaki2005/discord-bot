@@ -58,26 +58,72 @@ QRIS_FILE = Path(__file__).parent / "assets" / "qris.png"
 
 WARNING_MARKER = "⏳ Pengingat:"
 
+DIV = "\n\u200b\n_________________________\n\n"
+
 PRODUCTS = {
     "blueprint": {
         "name": "Full Clipping Blueprint",
         "short": "blueprint",
-        "emoji": "🚀",
+        "emoji": "📘",
         "role_env": "BLUEPRINT_ROLE_ID",
         "plans": {
             "1b": {"label": "1 Bulan", "price": 229_000, "days": 30, "renewal": "Rp199.000 per bulan"},
-            "3b": {"label": "3 Bulan", "price": 389_000, "days": 90, "renewal": None},
+            "3b": {"label": "3 Bulan", "price": 389_000, "days": 90, "renewal": "Rp100.000 per 3 bulan"},
         },
+        "panel_title": "📘 Full Clipping Blueprint (ELITE CLASS)",
         "panel": (
-            "Belajar clipping dari nol sampai cuan lewat seri video lengkap, plus akses komunitas eksklusif.\n\n"
-            "**Yang lu dapet:**\n"
-            "• Breakdown clipping lengkap dan roadmap\n"
-            "• Tutorial editing format clip viral\n"
-            "• Setup dan warm-up akun, metode audiens Tier 1\n"
-            "• Review clip harian dari coach\n"
-            "• 2 webinar dan 2 Live Q&A tiap bulan\n"
-            "• Akses prioritas ke campaign brand eksklusif\n"
-            "• Paket aset (preset, SFX, overlay) dan giveaway eksklusif"
+            "💎 **PILIH PAKET FULL CLIPPING BLUEPRINT**\n\n"
+            "🥇 **FULL CLIPPING BLUEPRINT: 1 BULAN**\n"
+            "💰 Harga promo: **Rp229.000**\n"
+            "🔄 Perpanjangan Rp199.000/bulan.\n"
+            "🎯 Cocok buat kamu yang ingin mencoba program ini terlebih dahulu, belajar, "
+            "dan mulai membangun hasil pertamamu.\n\n"
+            "🥇 **FULL CLIPPING BLUEPRINT: 3 BULAN** 🔥 *PALING POPULER*\n"
+            "💰 Harga: **Rp389.000**\n"
+            "🔄 Perpanjangan Rp100.000/3 bulan.\n"
+            "🎯 Cocok buat kamu yang serius membangun skill clipping, konsisten berproses, "
+            "dan punya waktu lebih panjang untuk mengejar hasil pertamamu."
+            + DIV +
+            "🤝 **KOMUNITAS & BIMBINGAN**\n\n"
+            "✅ Akses komunitas eksklusif & support penuh 24/7\n"
+            "✅ Ruang feedback dan tumbuh bareng coach clipper berpengalaman\n"
+            "✅ Review clip setiap hari\n"
+            "✅ Akses langsung ke para top earner\n"
+            "✅ 2 webinar eksklusif + 2 Live Q&A tiap bulan\n"
+            "✅ Akses semua rekaman webinar eksklusif sebelumnya"
+            + DIV +
+            "📚 **MATERI & TUTORIAL**\n\n"
+            "✅ Breakdown clipping lengkap berdurasi 2 jam\n"
+            "✅ Roadmap lengkap menuju Rp30 sampai 100 juta per bulan\n"
+            "✅ Tutorial editing lengkap untuk membuat format clip viral\n"
+            "✅ Setup & warm-up akun yang benar\n"
+            "✅ Penjelasan virality, views, dan analytics secara tuntas\n"
+            "✅ Metode menjangkau audiens Tier 1\n"
+            "✅ Cara mengatasi 0 View Jail di YouTube Shorts\n"
+            "✅ Metode teruji untuk berbagai platform\n"
+            "✅ Cara membangun theme page yang sukses sebagai aset jangka panjang\n"
+            "✅ Cara mengubah clipping menjadi sumber income berkelanjutan\n"
+            "✅ Penjelasan lengkap berbagai platform clipping\n"
+            "✅ Panduan mendalam untuk masalah umum & spesifik Nusa Elite Clippers\n"
+            "✅ Mindset dan ketahanan jangka panjang di dunia clipping"
+            + DIV +
+            "💸 **PELUANG & INCOME**\n\n"
+            "✅ Akses prioritas ke campaign brand eksklusif\n"
+            "✅ Update peluang campaign secara rutin\n"
+            "✅ Marketplace privat\n"
+            "✅ Dealer CC Pro terpercaya"
+            + DIV +
+            "🎁 **TOOLS & BONUS**\n\n"
+            "✅ Paket aset pilihan: preset, SFX, dan overlay\n"
+            "🎉 Giveaway eksklusif: proxy, akun, dan bonus lainnya"
+            + DIV +
+            "💳 **INFORMASI PEMBAYARAN**\n\n"
+            "• Klik tombol paket di bawah, lalu isi form singkat.\n"
+            "• Bot bakal bikin room pembayaran pribadi buat kamu. Pembayaran via **QRIS**.\n"
+            "• Upload bukti bayar di room itu, tim kami verifikasi maksimal 1x24 jam.\n\n"
+            "🚀 Pilih paketmu dan mulai perjalanan clipping-mu bersama NusaKlip!\n\n"
+            "*Catatan: Penghasilan yang disebutkan dalam roadmap merupakan target pembelajaran, "
+            "bukan jaminan pendapatan.*"
         ),
     },
     "mentoring": {
@@ -89,15 +135,30 @@ PRODUCTS = {
             "1b": {"label": "1 Bulan", "price": 389_000, "days": 30, "renewal": "Rp389.000 per bulan"},
             "3b": {"label": "3 Bulan", "price": 829_000, "days": 90, "renewal": "Rp829.000 per 3 bulan"},
         },
+        "panel_title": "👑 NusaKlip: MENTORING EKSKLUSIF",
         "panel": (
-            "Semua isi Full Clipping Blueprint, ditambah dibimbing langsung sama mentor "
-            "sampai hasil pertama lu kelihatan.\n\n"
-            "**Tambahan dari Blueprint:**\n"
-            "• Sesi mentoring personal, bukan cuma materi\n"
-            "• Target dan evaluasi progress yang dipersonalisasi\n"
-            "• Prioritas review clip dari mentor\n"
-            "• Room mentoring pribadi di Discord\n\n"
-            "Kuota mentoring dibatasi biar kualitas bimbingan tetap terjaga."
+            "💎 **PILIHAN PAKET MENTORING**\n\n"
+            "📅 **Mentoring Eksklusif: 1 Bulan**\n"
+            "💰 Harga: **Rp389.000**\n"
+            "🎯 Cocok buat kamu yang ingin mendapatkan bimbingan intensif dan mulai membangun "
+            "progress dengan arahan mentor.\n\n"
+            "👑 **Mentoring Eksklusif: 3 Bulan** 🔥 *PALING POPULER*\n"
+            "💰 Harga: **Rp829.000**\n"
+            "🎯 Cocok buat kamu yang ingin mendapatkan pendampingan lebih panjang, evaluasi "
+            "progress, dan arahan berkelanjutan selama 3 bulan."
+            + DIV +
+            "🏆 **APA YANG KAMU DAPATKAN?**\n\n"
+            "✅ Semua benefit Full Clipping Blueprint: komunitas, materi, peluang, dan tools.\n"
+            "✅ Pendampingan langsung bersama mentor.\n"
+            "✅ Sesi mentoring personal, bukan hanya materi.\n"
+            "✅ Target dan evaluasi progress yang disesuaikan dengan perkembanganmu.\n"
+            "✅ Prioritas review clip langsung dari mentor.\n"
+            "✅ Arahan strategi untuk membantu kamu mengejar hasil pertamamu."
+            + DIV +
+            "📩 **INGIN BERGABUNG DENGAN MENTORING EKSKLUSIF?**\n\n"
+            "Klik tombol di bawah, pilih durasi mentoring yang kamu inginkan, isi form singkat, "
+            "lalu lanjut bayar via **QRIS** di room pembayaran pribadimu.\n\n"
+            "🔥 Tingkatkan skill, evaluasi progress, dan bangun perjalanan clipping-mu bersama NusaKlip!"
         ),
     },
 }
@@ -176,16 +237,7 @@ def staff_mention(guild: discord.Guild) -> str:
 # ---------------------------------------------------------------------------
 def panel_embed(product: str) -> discord.Embed:
     p = PRODUCTS[product]
-    one, three = p["plans"]["1b"], p["plans"]["3b"]
-    desc = (
-        p["panel"]
-        + "\n\n**Pilih paket:**\n"
-        + f"💎 1 Bulan: **{rupiah(one['price'])}**\n"
-        + f"🚀 3 Bulan: **{rupiah(three['price'])}** (paling populer)\n\n"
-        + "Klik salah satu tombol di bawah, isi form singkat, nanti bot bikinin "
-        + "room pembayaran pribadi buat lu."
-    )
-    e = discord.Embed(title=f"{p['emoji']} {p['name']}", description=desc, color=COLOR)
+    e = discord.Embed(title=p["panel_title"], description=p["panel"], color=COLOR)
     e.set_footer(text="NusaKlip • Pembayaran via QRIS")
     return e
 
