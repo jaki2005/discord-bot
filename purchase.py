@@ -518,12 +518,12 @@ def welcome_text(member, product: str, plan: str, start: datetime, expires: date
         f"Halo kak {member.mention}, makasih udah beli NusaKlip {p['name']}! 🎉",
         "Berikut akses kamu:",
         "🎬 **Full Clipping Blueprint**\n"
-        "Cara aksesnya:\n"
+        + ("" if product == "mentoring" else f"Akses kamu aktif {period}.\n\n")
+        + "Cara aksesnya:\n"
         f"1. Buka Whop NusaKlip: {WHOP_URL}\n"
         "2. Masuk ke bagian Course\n"
         "3. Klik akses ke Full Clipping Blueprint\n"
-        "4. Selesai, langsung mulai belajar"
-        + ("" if product == "mentoring" else f"\nAkses kamu aktif {period}."),
+        "4. Selesai, langsung mulai belajar",
     ]
     if product == "mentoring":
         parts.append(
