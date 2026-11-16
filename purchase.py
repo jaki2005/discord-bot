@@ -241,8 +241,8 @@ def parse_state_url(url: str | None) -> dict | None:
     if not url or "nk=1" not in url:
         return None
     q = {k: v[0] for k, v in parse_qs(urlparse(url).query).items()}
-    if "u" not in q or q.get("p") not in PRODUCTS:
-        return None
+    if q.get("k") or "u" not in q or q.get("p") not in PRODUCTS:
+        return None  # "k" marks other kinds (konsultasi, perpanjang, member records)
     q.pop("nk", None)
     return q
 
@@ -685,8 +685,9 @@ class RoomView(LoggedView):
             )
 
         email, whop_user = room_whop(msg)
-        await _log_verification(guild, member, product, plan, email, whop_user,
-                                interaction.user, expires, role, dm_ok)
+        import renewal  # lazy: renewal imports this module
+        await renewal.on_new_access(guild, member, product, plan, expires, interaction.user, role,
+                                    email, whop_user, dm_ok)
 
     @discord.ui.button(label="Tutup Room", emoji="❌",
                        style=discord.ButtonStyle.secondary, custom_id="nk:pay:close")
@@ -720,27 +721,6 @@ class ConfirmClose(discord.ui.View):
             await interaction.followup.send(
                 "Transkrip gagal disimpan, jadi room nggak dihapus. Cek ARCHIVE_CHANNEL_ID.", ephemeral=True
             )
-
-
-async def _log_verification(guild, member, product, plan, email, whop_user, staff, expires, role, dm_ok=True):
-    ch = guild.get_channel(PURCHASE_LOG_CHANNEL_ID) if PURCHASE_LOG_CHANNEL_ID else None
-    if not isinstance(ch, discord.TextChannel):
-        return
-    p = PRODUCTS[product]
-    info = p["plans"][plan]
-    e = discord.Embed(title=f"🧾 Akses dibuka: {p['name']} ({info['label']})", color=0x2ECC71)
-    e.add_field(name="Member", value=f"{member.mention}\n`{member.id}`")
-    e.add_field(name="Harga", value=rupiah(info["price"]))
-    e.add_field(name="Aktif sampai", value=fmt_date(expires))
-    e.add_field(name="Email WHOP", value=f"`{email}`")
-    e.add_field(name="Username WHOP", value=f"`{whop_user}`")
-    e.add_field(name="Role", value=role.mention)
-    e.add_field(name="DM sambutan", value="✅ terkirim" if dm_ok else "⚠️ gagal (DM member tertutup)")
-    e.set_footer(text=f"Diverifikasi oleh {staff.display_name}")
-    try:
-        await ch.send(embed=e, allowed_mentions=discord.AllowedMentions.none())
-    except discord.HTTPException:
-        pass
 
 
 async def close_room(ch: discord.TextChannel, reason: str) -> bool:

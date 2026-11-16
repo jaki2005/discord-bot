@@ -336,8 +336,10 @@ if __name__ == "__main__":
     import archive  # imported after load_dotenv() so it sees ARCHIVE_* env vars
     import purchase  # Buka Akses: panels, forms, private payment rooms
     import consult  # Konsultasi Akses: support tickets with Udah/Belum auto-close
+    import renewal  # Masa aktif + perpanjang: reminders, Alumni role, renewal rooms
 
     archive.setup(bot)
     purchase.setup(bot)
     consult.setup(bot)
+    renewal.setup(bot)
     bot.run(BOT_TOKEN)
