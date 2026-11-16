@@ -57,3 +57,6 @@ Flow: member picks 1 Bulan or 3 Bulan, fills a short form (WHOP email, WHOP user
 
 ## Welcome post
 Posted every `WELCOME_INTERVAL_HOURS` (default 2) in `WELCOME_CHANNEL_ID`. The bot checks every 10 minutes and only posts when its last welcome post in that channel is older than the interval, so restarts and redeploys never cause an extra post. The previous welcome post is deleted when a new one goes out (`WELCOME_DELETE_PREVIOUS`).
+
+## Konsultasi Akses tickets
+`consult.py`. Run `/konsultasi panel` in the consult channel. Members click **Konsultasi** to open a private ticket (member + `STAFF_ROLE_ID` + bot; staff is pinged). After `CONSULT_INACTIVITY_HOURS` without a member/staff message the bot asks "udah beres?" with **Udah** (closes) / **Belum** (tags staff, restarts the clock). No answer for `CONSULT_FORCE_CLOSE_HOURS` closes the ticket. Every ticket is archived to `ARCHIVE_CHANNEL_ID` before deletion.
