@@ -124,10 +124,14 @@ async def write_record(guild, member, product, plan, expires, staff, role, *, ki
     p = P.PRODUCTS[product]
     info = p["plans"][plan]
     state = {"u": member.id, "p": product, "pl": plan, "x": int(expires.timestamp()), "s": "active"}
-    title = "🧾 Akses dibuka" if kind == "baru" else "🔁 Perpanjangan"
+    title = {"baru": "🧾 Akses dibuka", "upgrade": "⬆️ Upgrade dari Blueprint"}.get(kind, "🔁 Perpanjangan")
     e = discord.Embed(title=f"{title}: {p['name']} ({info['label']})", url=record_url(state), color=GREEN)
     e.add_field(name="Member", value=f"{member.mention}\n`{member.id}`")
-    e.add_field(name="Harga", value=P.rupiah(info["price"]) if kind == "baru" else (info["renewal"] or "-"))
+    if kind in ("baru", "upgrade"):
+        harga = P.rupiah(P.plan_price(product, plan, kind == "upgrade"))
+    else:
+        harga = P.rupiah(info["renew_price"])
+    e.add_field(name="Harga", value=harga)
     e.add_field(name="Aktif sampai", value=P.fmt_date(expires))
     e.add_field(name="Email WHOP", value=f"`{email}`")
     e.add_field(name="Username WHOP", value=f"`{whop_user}`")
@@ -203,7 +207,8 @@ async def other_product_live(guild, user_id: int, product: str, now: datetime) -
     return False
 
 
-async def on_new_access(guild, member, product, plan, expires, staff, role, email, whop_user, dm_ok):
+async def on_new_access(guild, member, product, plan, expires, staff, role, email, whop_user, dm_ok,
+                        upgrade: bool = False):
     """Called by purchase.py after a Buka Akses verification."""
     alum = alumni_role(guild)
     if alum and alum in member.roles:
@@ -212,7 +217,7 @@ async def on_new_access(guild, member, product, plan, expires, staff, role, emai
         except discord.HTTPException:
             pass
     await write_record(guild, member, product, plan, expires, staff, role,
-                       kind="baru", email=email, whop_user=whop_user, dm_ok=dm_ok)
+                       kind="upgrade" if upgrade else "baru", email=email, whop_user=whop_user, dm_ok=dm_ok)
 
 
 async def dm(member, text: str) -> bool:

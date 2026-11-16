@@ -61,6 +61,12 @@ QRIS_FILE = Path(__file__).parent / "assets" / "qris.png"
 
 WARNING_MARKER = "⏳ Pengingat:"
 STATE_BASE = "https://nusaklip.online/"
+
+# Upgrade Blueprint -> Mentoring: fixed discount for members who still hold the Blueprint role.
+UPGRADE_DISCOUNT = {
+    "1b": int(os.getenv("UPGRADE_DISCOUNT_1B", "100000")),
+    "3b": int(os.getenv("UPGRADE_DISCOUNT_3B", "200000")),
+}
 ROOM_PREFIXES = ("⏳", "✅", "👑")
 
 # Sent after verification (replaces the welcome message staff used to type by hand).
@@ -233,7 +239,7 @@ def staff_mention(guild: discord.Guild) -> str:
 #   https://nusaklip.online/?nk=1&u=<user id>&p=blueprint&pl=1b&s=pending
 # s: pending | verified | active.  v: verified at (unix).  x: expires (unix).
 # ---------------------------------------------------------------------------
-STATE_KEYS = ("u", "p", "pl", "s", "v", "x")
+STATE_KEYS = ("u", "p", "pl", "s", "v", "x", "up")
 
 
 def state_url(state: dict) -> str:
@@ -251,10 +257,15 @@ def parse_state_url(url: str | None) -> dict | None:
     return q
 
 
+def plan_price(product: str, plan: str, upgrade: bool = False) -> int:
+    price = PRODUCTS[product]["plans"][plan]["price"]
+    return price - UPGRADE_DISCOUNT.get(plan, 0) if upgrade else price
+
+
 def topic_text(state: dict) -> str:
     p = PRODUCTS[state["p"]]
     label = p["plans"].get(state.get("pl", "1b"), {}).get("label", "")
-    paket = f"{p['name']} {label}".strip()
+    paket = f"{p['name']} {label}".strip() + (" (upgrade dari Blueprint)" if state.get("up") else "")
     status = state.get("s")
     if status == "active":
         until = fmt_date(datetime.fromtimestamp(int(state["x"]), timezone.utc)) if state.get("x") else "-"
@@ -306,7 +317,16 @@ async def save_state(msg: discord.Message, state: dict) -> None:
 # ---------------------------------------------------------------------------
 def panel_embed(product: str) -> discord.Embed:
     p = PRODUCTS[product]
-    e = discord.Embed(title=p["panel_title"], description=p["panel"], color=COLOR)
+    desc = p["panel"]
+    if product == "mentoring":
+        lines = "\n".join(
+            f"• {info['label']}: **{rupiah(plan_price(product, pl, True))}** ~~{rupiah(info['price'])}~~"
+            for pl, info in p["plans"].items()
+        )
+        desc += (DIV + "⬆️ **UDAH PUNYA FULL CLIPPING BLUEPRINT AKTIF?**\n\n"
+                 f"Upgrade ke Mentoring Eksklusif dengan harga khusus:\n{lines}\n\n"
+                 "Klik tombol **Upgrade dari Blueprint** di bawah. Masa Mentoring dihitung mulai hari kamu upgrade.")
+    e = discord.Embed(title=p["panel_title"], description=desc, color=COLOR)
     e.set_footer(text="NusaKlip • Pembayaran via QRIS")
     return e
 
@@ -355,11 +375,67 @@ class LoggedView(discord.ui.View):
             pass
 
 
+def pending_room_of(guild, uid: int):
+    return next(
+        (ch for ch in room_channels(guild, ("⏳",)) if any(getattr(t, "id", None) == uid for t in ch.overwrites)),
+        None,
+    )
+
+
+class UpgradeButton(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Upgrade dari Blueprint", emoji="⬆️", style=discord.ButtonStyle.secondary,
+                         custom_id="nk:buy:mentoring:upgrade")
+
+    async def callback(self, interaction: discord.Interaction):
+        member = interaction.user
+        existing = pending_room_of(interaction.guild, member.id)
+        if existing:
+            await interaction.response.send_message(
+                f"Kamu masih punya room pembayaran yang aktif: {existing.mention}. Selesaiin atau tutup dulu ya.",
+                ephemeral=True)
+            return
+        role_ids = {r.id for r in getattr(member, "roles", [])}
+        if role_id_for("mentoring") in role_ids:
+            await interaction.response.send_message(
+                "Kamu udah punya akses Mentoring. Kalau mau nambah masa aktif, lewat #perpanjang-akses ya.",
+                ephemeral=True)
+            return
+        if role_id_for("blueprint") not in role_ids:
+            await interaction.response.send_message(
+                "Harga upgrade khusus buat member yang **Full Clipping Blueprint**-nya masih aktif. "
+                "Kamu tetap bisa ambil Mentoring lewat tombol 1 Bulan atau 3 Bulan di atas ya.",
+                ephemeral=True)
+            return
+        await interaction.response.send_message(
+            "Pilih durasi Mentoring yang mau kamu ambil:", view=UpgradeChoice(), ephemeral=True)
+
+
+class UpgradeChoice(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=180)
+        for plan, info in PRODUCTS["mentoring"]["plans"].items():
+            btn = discord.ui.Button(
+                label=f"{info['label']} · {rupiah(plan_price('mentoring', plan, True))}",
+                emoji="💎" if plan == "1b" else "🚀",
+                style=discord.ButtonStyle.success if plan == "1b" else discord.ButtonStyle.primary,
+            )
+            btn.callback = self._make(plan)
+            self.add_item(btn)
+
+    def _make(self, plan):
+        async def cb(interaction: discord.Interaction):
+            await interaction.response.send_modal(PurchaseForm("mentoring", plan, upgrade=True))
+        return cb
+
+
 class PanelView(LoggedView):
     def __init__(self, product: str):
         super().__init__(timeout=None)
         self.add_item(PlanButton(product, "1b"))
         self.add_item(PlanButton(product, "3b"))
+        if product == "mentoring":
+            self.add_item(UpgradeButton())
 
 
 # ---------------------------------------------------------------------------
@@ -383,10 +459,12 @@ class PurchaseForm(discord.ui.Modal):
         max_length=10,
     )
 
-    def __init__(self, product: str, plan: str):
+    def __init__(self, product: str, plan: str, upgrade: bool = False):
         p = PRODUCTS[product]
-        super().__init__(title=f"Daftar {p['name']} {p['plans'][plan]['label']}"[:45])
-        self.product, self.plan = product, plan
+        label = p["plans"][plan]["label"]
+        title = f"Upgrade ke Mentoring {label}" if upgrade else f"Daftar {p['name']} {label}"
+        super().__init__(title=title[:45])
+        self.product, self.plan, self.upgrade = product, plan, upgrade
 
     async def on_submit(self, interaction: discord.Interaction):
         email = self.email.value.strip()
@@ -432,8 +510,11 @@ class PurchaseForm(discord.ui.Modal):
             )
 
         state = {"u": member.id, "p": self.product, "pl": self.plan, "s": "pending"}
+        if self.upgrade:
+            state["up"] = 1
         whop_user = self.whop_username.value.strip()
-        name = f"{PRODUCTS[self.product]['short']}-{self.plan.replace('b', 'bln')}-{slug(member.name)}"
+        prefix = "upgrade" if self.upgrade else PRODUCTS[self.product]["short"]
+        name = f"{prefix}-{self.plan.replace('b', 'bln')}-{slug(member.name)}"
         try:
             room = await category.create_text_channel(
                 name=name,
@@ -467,9 +548,10 @@ class PurchaseForm(discord.ui.Modal):
 def room_embed(product, plan, member, state, email, whop_user):
     p = PRODUCTS[product]
     info = p["plans"][plan]
-    price = rupiah(info["price"])
+    upgrade = bool(state.get("up"))
+    price = rupiah(plan_price(product, plan, upgrade))
     e = discord.Embed(
-        title=f"{p['emoji']} {p['name']}: Paket {info['label']}",
+        title=f"{p['emoji']} {p['name']}: Paket {info['label']}" + (" (Upgrade)" if upgrade else ""),
         url=state_url(state),
         description=(
             f"Hai {member.mention}, ini room pendaftaran pribadi lu. "
@@ -480,7 +562,7 @@ def room_embed(product, plan, member, state, email, whop_user):
     paket = (
         f"• **Produk:** {p['name']}\n"
         f"• **Durasi:** {info['label']} ({info['days']} hari)\n"
-        f"• **Harga:** {price}"
+        f"• **Harga:** {price}" + (f" ~~{rupiah(info['price'])}~~ (harga upgrade dari Blueprint)" if upgrade else "")
     )
     if info["renewal"]:
         paket += f"\n• **Perpanjangan:** {info['renewal']}"
@@ -689,7 +771,7 @@ class RoomView(LoggedView):
         email, whop_user = room_whop(msg)
         import renewal  # lazy: renewal imports this module
         await renewal.on_new_access(guild, member, product, plan, expires, interaction.user, role,
-                                    email, whop_user, dm_ok)
+                                    email, whop_user, dm_ok, upgrade=bool(state.get("up")))
 
     @discord.ui.button(label="Tutup Room", emoji="❌",
                        style=discord.ButtonStyle.secondary, custom_id="nk:pay:close")
