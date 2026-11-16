@@ -25,6 +25,7 @@ import io
 import os
 import re
 import time
+import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -336,7 +337,21 @@ class PlanButton(discord.ui.Button):
         await interaction.response.send_modal(PurchaseForm(self.product, self.plan))
 
 
-class PanelView(discord.ui.View):
+class LoggedView(discord.ui.View):
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item) -> None:
+        print(f"[purchase] error on {getattr(item, 'custom_id', item)}: {type(error).__name__}: {error}", flush=True)
+        traceback.print_exception(type(error), error, error.__traceback__)
+        try:
+            msg = "Ada error di bot. Coba lagi sebentar, atau tag tim NusaKlip ya."
+            if interaction.response.is_done():
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await interaction.response.send_message(msg, ephemeral=True)
+        except discord.HTTPException:
+            pass
+
+
+class PanelView(LoggedView):
     def __init__(self, product: str):
         super().__init__(timeout=None)
         self.add_item(PlanButton(product, "1b"))
@@ -552,7 +567,7 @@ async def _room_or_reply(interaction: discord.Interaction):
     return msg, state
 
 
-class RoomView(discord.ui.View):
+class RoomView(LoggedView):
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -883,7 +898,16 @@ def setup(bot) -> None:
     loop = make_loop(bot)
 
     async def _start_loop():
+        print(f"[purchase] ready, persistent views: {len(bot.persistent_views)}", flush=True)
         if not loop.is_running():
             loop.start()
 
+    async def _log_interaction(interaction: discord.Interaction):
+        data = interaction.data or {}
+        cid = data.get("custom_id") or data.get("name")
+        if cid and (str(cid).startswith("nk:") or cid == "akses"):
+            print(f"[purchase] interaction {interaction.type.name} {cid} from {interaction.user} "
+                  f"in #{getattr(interaction.channel, 'name', '?')}", flush=True)
+
     bot.add_listener(_start_loop, "on_ready")
+    bot.add_listener(_log_interaction, "on_interaction")
