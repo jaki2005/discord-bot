@@ -48,17 +48,11 @@ WELCOME_MARKER = "Hallo!! Welcome"  # how the bot recognises its own previous we
 WELCOME_MESSAGE = os.getenv("WELCOME_MESSAGE", "").strip().replace("\\n", "\n") or (
     "Hallo!! Welcome buat yang baru join NusaKlip 👋\n\n"
     "Biar nggak bingung, mulai dari sini ya:\n"
-    f"1️⃣ Baca dulu aturan server di {_channel_ref(RULES_CHANNEL_ID, 'rules')}\n"
-    f"2️⃣ Daftar Content Rewards lewat {_channel_ref(CONTENT_REWARDS_CHANNEL_ID, 'daftar-content-rewards')}\n"
-    f"3️⃣ Pelajari panduan gratisnya di {_channel_ref(GUIDE_CHANNEL_ID, 'panduan-gratis-content-rewards')}, "
-    "FAQ-nya tinggal download, gratis buat dipelajari\n\n"
-    "Mau belajar lebih serius dan dibimbing langsung?\n"
-    f"📘 Full Clipping Blueprint: {_channel_ref(BLUEPRINT_CHANNEL_ID, 'full-clipping-blueprint')}\n"
-    f"👑 Mentoring Eksklusif: {_channel_ref(MENTORING_CHANNEL_ID, 'mentoring-ekslusif')}\n"
-    f"💬 Masih bingung pilih yang mana? Tanya admin di {_channel_ref(CONSULT_CHANNEL_ID, 'konsultasi-akses')}\n\n"
-    "✂️ Butuh CapCut Pro premium? Ada yang bergaransi 100%, cek di "
-    f"{_channel_ref(CAPCUT_CHANNEL_ID, 'capcut-pro')} ya qaqah🥰\n\n"
-    "Semangat menjadi Dollar🤑🤑"
+    f"1️⃣ Daftar Content Rewards lewat {_channel_ref(CONTENT_REWARDS_CHANNEL_ID, 'daftar-content-rewards')}\n"
+    f"2️⃣ Pelajari panduan gratisnya di {_channel_ref(GUIDE_CHANNEL_ID, 'panduan-gratis-content-rewards')}, "
+    "FAQ-nya tinggal download, gratis buat dipelajari\n"
+    "3️⃣ Mau belajar lebih serius dan dibimbing langsung? Tanya admin di "
+    f"{_channel_ref(CONSULT_CHANNEL_ID, 'konsultasi-akses')}"
 )
 WELCOME_INTERVAL_HOURS = float(os.getenv("WELCOME_INTERVAL_HOURS", "2"))
 # Delete the previous welcome post when a new one goes out, so a busy public chat only
