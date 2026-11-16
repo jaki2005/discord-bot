@@ -110,7 +110,7 @@ KINDS = {
         color=0xE74C3C,
         panel_title="🌟 Bantuan VIP",
         panel_text=(
-            "Halo Member VIP! Punya kendala atau pertanyaan seputar materi?\n\n"
+            "Halo teman-teman! Punya kendala atau pertanyaan seputar materi?\n\n"
             "Klik tombol di bawah untuk terhubung langsung dengan Tim Staf lewat jalur prioritas. "
             "Kami akan mendampingimu sampai tuntas!\n\n"
             "**Setelah ticket kebuat:**\n"
