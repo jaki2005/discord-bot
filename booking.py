@@ -4,7 +4,8 @@ Booking 1-on-1: coaching session tickets for Mentoring members (replaces Ticket 
   /booking panel [channel]   posts the panel in #booking-1on1 with one "BOOKING 1-ON-1" button.
 
   Click -> private ticket in BOOKING_CATEGORY_ID (member + coach role + staff role + bot).
-  The member tags a coach and writes when they are free; the coach answers with a slot.
+  The member writes when they are free and presses "Panggil Coach" (bot tags the coach role,
+  30 min cooldown); the coach answers with a slot.
   Only members holding the Mentoring role (or staff) can open one. Payment rooms are never
   visible to coaches; booking tickets are the only place coaches are added.
 
@@ -14,6 +15,7 @@ Booking 1-on-1: coaching session tickets for Mentoring members (replaces Ticket 
 """
 
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
@@ -31,6 +33,8 @@ FORCE_CLOSE_HOURS = float(os.getenv("BOOKING_FORCE_CLOSE_HOURS", "24"))
 CHECK_MINUTES = float(os.getenv("BOOKING_CHECK_INTERVAL_MINUTES", "30"))
 
 TOPIC_PREFIX = "🎫 Booking 1-on-1"
+PING_COOLDOWN_SECONDS = 30 * 60
+_last_ping: dict[int, float] = {}
 
 
 def coach_role(guild):
@@ -73,9 +77,9 @@ def panel_embed(guild=None) -> discord.Embed:
             "Mau mendapatkan sesi 1-on-1 bersama tim NusaKlip?\n"
             "Klik tombol di bawah untuk membuat ticket dan masuk ke antrean sesi 1-on-1.\n\n"
             "**Setelah ticket kebuat, jangan lupa:**\n"
-            f"1. Tag {coach_mention(guild) if guild else 'coach'} di dalam ticket\n"
-            "2. Tulis kamu bisanya hari apa dan jam berapa\n"
-            "Nanti coach bakal kasih tahu waktu available-nya.\n\n"
+            "1. Tulis kamu bisanya hari apa dan jam berapa\n"
+            "2. Klik tombol **Panggil Coach**, nanti NusaKlip AI yang ngetag coach\n"
+            "Coach bakal kasih tahu waktu available-nya di ticket kamu.\n\n"
             "Mohon bersabar selama menunggu giliran. Kami akan menghubungi kamu melalui "
             "ticket ini ketika sesi kamu sudah siap."
         ),
@@ -136,10 +140,10 @@ class PanelView(C.LoggedView):
             description=(
                 f"Halo {member.mention}! Ticket booking 1-on-1 kamu udah kebuka.\n\n"
                 "**Biar cepat dijadwalin:**\n"
-                f"1. Tag {coach_mention(guild)} di sini\n"
-                "2. Tulis kamu bisanya hari apa dan jam berapa "
+                "1. Tulis kamu bisanya hari apa dan jam berapa "
                 "(contoh: Rabu atau Kamis, jam 19.00 sampai 21.00 WIB)\n"
-                "3. Kalau ada yang mau dibahas (clip, akun, strategi), tulis juga ya\n\n"
+                "2. Kalau ada yang mau dibahas (clip, akun, strategi), tulis juga ya\n"
+                "3. Klik **Panggil Coach**, nanti NusaKlip AI yang ngetag coach\n\n"
                 "Nanti coach bakal kasih tahu waktu available-nya di sini. "
                 "Kalau sesinya udah selesai, klik **Selesai, tutup ticket**."
             ),
@@ -157,6 +161,35 @@ class PanelView(C.LoggedView):
 class TicketView(C.LoggedView):
     def __init__(self):
         super().__init__(timeout=None)
+
+    @discord.ui.button(label="Panggil Coach", emoji="🔔", style=discord.ButtonStyle.primary,
+                       custom_id="nk:book:ping")
+    async def ping(self, interaction: discord.Interaction, button: discord.ui.Button):
+        owner = await C.ticket_owner(interaction.channel)
+        if interaction.user.id != owner and not is_coach_or_staff(interaction.user):
+            await interaction.response.send_message("Tombol ini buat pemilik ticket.", ephemeral=True)
+            return
+        wrote = False
+        async for m in interaction.channel.history(limit=50):
+            if m.author.id == owner and (m.content.strip() or m.attachments):
+                wrote = True
+                break
+        if not wrote:
+            await interaction.response.send_message(
+                "Tulis dulu kamu bisanya hari apa dan jam berapa di ticket ini, baru panggil coach ya.",
+                ephemeral=True)
+            return
+        now = time.time()
+        if now - _last_ping.get(interaction.channel.id, 0) < PING_COOLDOWN_SECONDS:
+            await interaction.response.send_message(
+                "Coach udah dipanggil barusan, tunggu balasannya sebentar ya.", ephemeral=True)
+            return
+        _last_ping[interaction.channel.id] = now
+        await interaction.response.send_message(
+            f"🔔 {coach_mention(interaction.guild)}, <@{owner}> mau jadwalin sesi 1-on-1. "
+            "Jadwal yang dia bisa ada di atas, tolong kabarin kapan kamu available ya.",
+            allowed_mentions=discord.AllowedMentions(roles=True, users=False),
+        )
 
     @discord.ui.button(label="Selesai, tutup ticket", emoji="✅", style=discord.ButtonStyle.secondary,
                        custom_id="nk:book:close")
