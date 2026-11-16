@@ -286,6 +286,8 @@ if __name__ == "__main__":
     if not BOT_TOKEN:
         raise SystemExit("BOT_TOKEN is not set. Copy .env.example to .env and fill it in.")
     import archive  # imported after load_dotenv() so it sees ARCHIVE_* env vars
+    import purchase  # Buka Akses: panels, forms, private payment rooms
 
     archive.setup(bot)
+    purchase.setup(bot)
     bot.run(BOT_TOKEN)

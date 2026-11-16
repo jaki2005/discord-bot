@@ -44,3 +44,13 @@ I'd suggest Railway first since it needs the least server administration — say
 - A background loop checks all open tickets on an interval (`TICKET_CHECK_INTERVAL_MINUTES`), posts one warning before closing, then deletes the channel once the inactivity threshold is hit.
 - The welcome message loop posts on a fixed interval from whenever the bot starts; it does not currently post at a fixed clock time (e.g. "every day at 9am") — ask if you want that instead, it's a small change.
 - No AI involved anywhere in this bot — it's pure automation: the same welcome text, posted on a timer, and tickets that open/close on fixed rules.
+
+## Buka Akses (purchase flow)
+`purchase.py` replaces the ticket bot for purchases.
+
+1. Set the `PURCHASE_*`, `STAFF_ROLE_ID`, `BLUEPRINT_ROLE_ID`, `MENTORING_ROLE_ID`, `PAYMENT_BANK_TEXT` and `QRIS_IMAGE_URL` variables (see `.env.example`).
+2. Give the bot **Manage Channels** and **Manage Roles**, and drag the NusaKlip AI role **above** the Blueprint and Mentoring roles.
+3. Run `/akses cek` to see what is still missing.
+4. In each product channel run `/akses panel produk:<Blueprint|Mentoring>`.
+
+Flow: member picks 1 Bulan or 3 Bulan, fills a short form (WHOP email, WHOP username, SETUJU), gets a private room with payment steps. They upload proof and press **Udah Bayar, Panggil Staff**. Staff press **Verifikasi & Buka Akses**, the bot adds the role, posts the expiry date and logs it to `PURCHASE_LOG_CHANNEL_ID`. Blueprint rooms close 24h after verification; Mentoring rooms are renamed `mentee-<name>` and kept as the mentee's private room. Unpaid rooms get a warning, then close after 24h idle. Every closed room is archived to `ARCHIVE_CHANNEL_ID` first. State lives in the channel topic, so redeploys lose nothing.
