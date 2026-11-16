@@ -541,9 +541,7 @@ def welcome_text(member, product: str, plan: str, start: datetime, expires: date
         + ("" if product == "mentoring" else f"Akses kamu aktif {period}.\n\n")
         + "Cara aksesnya:\n"
         f"1. Buka Whop NusaKlip: {WHOP_URL}\n"
-        "2. Masuk ke bagian Course\n"
-        "3. Klik akses ke Full Clipping Blueprint\n"
-        "4. Selesai, langsung mulai belajar",
+        "2. Masuk ke bagian Course, terus klik Full Clipping Blueprint dan isi nama discord kamu",
     ]
     if product == "mentoring":
         parts.append(
