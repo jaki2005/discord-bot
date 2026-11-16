@@ -183,13 +183,24 @@ async def make_active(member: discord.Member, product: str, reason: str) -> disc
     return role
 
 
-async def make_alumni(member: discord.Member, product: str, reason: str) -> None:
+async def make_alumni(member: discord.Member, product: str, reason: str, *, still_member: bool = False) -> None:
+    """Remove the product role. Add Alumni only if no other product is still active."""
     role = member.guild.get_role(P.role_id_for(product) or 0)
     if role and role in member.roles:
         await member.remove_roles(role, reason=reason)
+    if still_member:
+        return
     alum = alumni_role(member.guild)
     if alum and alum not in member.roles:
         await member.add_roles(alum, reason=reason)
+
+
+async def other_product_live(guild, user_id: int, product: str, now: datetime) -> bool:
+    """True if the member still has an active record for a different product (e.g. upgraded to Mentoring)."""
+    async for _, st in iter_records(guild):
+        if st["u"] == str(user_id) and st["p"] != product and st.get("s") in LIVE and now < end_time(st):
+            return True
+    return False
 
 
 async def on_new_access(guild, member, product, plan, expires, staff, role, email, whop_user, dm_ok):
@@ -609,7 +620,9 @@ class ConfirmChurn(discord.ui.View):
         product = state["p"]
         if member:
             try:
-                await make_alumni(member, product, f"Nggak lanjut, dikonfirmasi {interaction.user}")
+                still = await other_product_live(guild, member.id, product, datetime.now(timezone.utc))
+                await make_alumni(member, product, f"Nggak lanjut, dikonfirmasi {interaction.user}",
+                                  still_member=still)
             except discord.Forbidden:
                 await interaction.followup.send("Bot nggak bisa ubah role. Cek urutan role NusaKlip AI.", ephemeral=True)
                 return
@@ -744,14 +757,23 @@ async def process_records(guild, now: datetime):
 
         if now >= end_time(state):
             if member:
+                still = any(
+                    st2["u"] == state["u"] and st2["p"] != product and st2.get("s") in LIVE and now < end_time(st2)
+                    for _, st2 in records
+                )
                 try:
-                    await make_alumni(member, product, "Masa aktif habis")
+                    await make_alumni(member, product, "Masa aktif habis", still_member=still)
                 except discord.HTTPException as e:
                     print(f"[renewal] could not change roles for {member}: {e}", flush=True)
                     continue
-                text = (f"Halo kak {member.mention}, akses **{p['name']}** kamu udah berakhir "
-                        f"(aktif sampai {P.fmt_date_long(x)}). Sekarang kamu jadi **NusaKlip Alumni**.\n\n"
-                        f"Kalau mau lanjut belajar bareng lagi, perpanjang aja di {renew_ref()} ya. Makasih banyak! 🙏")
+                if still:
+                    text = (f"Halo kak {member.mention}, akses **{p['name']}** kamu udah berakhir "
+                            f"(aktif sampai {P.fmt_date_long(x)}). Akses kamu yang lain masih aktif, "
+                            "jadi kamu tetap bisa belajar seperti biasa. 🙏")
+                else:
+                    text = (f"Halo kak {member.mention}, akses **{p['name']}** kamu udah berakhir "
+                            f"(aktif sampai {P.fmt_date_long(x)}). Sekarang kamu jadi **NusaKlip Alumni**.\n\n"
+                            f"Kalau mau lanjut belajar bareng lagi, perpanjang aja di {renew_ref()} ya. Makasih banyak! 🙏")
                 await dm(member, text)
                 room = guild.get_channel(int(state["rm"])) if state.get("rm") else None
                 if isinstance(room, discord.TextChannel):
@@ -763,6 +785,14 @@ async def process_records(guild, now: datetime):
             print(f"[renewal] expired {state['u']} {product}", flush=True)
 
         elif s == "active" and now >= x - timedelta(days=REMIND_DAYS) and member:
+            covered = any(  # e.g. Blueprint ending while an upgraded Mentoring runs longer: no renewal nag
+                st2["u"] == state["u"] and st2["p"] != product and st2.get("s") in LIVE
+                and int(st2["x"]) > int(state["x"])
+                for _, st2 in records
+            )
+            if covered:
+                await update_record(msg, s="reminded")
+                continue
             room = open_room_for(guild, member.id)
             if room is None:
                 try:
