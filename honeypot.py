@@ -78,6 +78,8 @@ async def on_message(message: discord.Message) -> None:
     if not CHANNEL_ID or message.channel.id != CHANNEL_ID or message.guild is None:
         return
     author = message.author
+    if author.id == message.guild.me.id:
+        return  # the bot's own posts (warning embed, /kirim) must stay
     try:
         await message.delete()
     except discord.HTTPException:
