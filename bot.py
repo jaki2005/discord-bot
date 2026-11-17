@@ -339,6 +339,7 @@ if __name__ == "__main__":
     import renewal  # Masa aktif + perpanjang: reminders, Alumni role, renewal rooms
     import booking  # Booking 1-on-1 tickets for Mentoring members (coach role)
     import say  # /kirim and /edit-pesan: staff post as NusaKlip AI
+    import honeypot  # room jebakan: auto-remove compromised accounts that post there
 
     archive.setup(bot)
     purchase.setup(bot)
@@ -346,4 +347,5 @@ if __name__ == "__main__":
     renewal.setup(bot)
     booking.setup(bot)
     say.setup(bot)
+    honeypot.setup(bot)
     bot.run(BOT_TOKEN)

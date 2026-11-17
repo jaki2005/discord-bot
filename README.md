@@ -69,3 +69,6 @@ Posted every `WELCOME_INTERVAL_HOURS` (default 2) in `WELCOME_CHANNEL_ID`. The b
 
 ## Bantuan Exclusive
 Same engine as Booking 1-on-1 (`booking.py`, kind `bantuan`). Run `/bantuan panel` in #bantuan. Members with `BLUEPRINT_ROLE_ID` or `MENTORING_ROLE_ID` click **BUAT BANTUAN** to open a private `bantuan-<name>` ticket in `BANTUAN_CATEGORY_ID` (member + coach + staff + bot), with **Panggil Coach** and **Selesai, tutup ticket** buttons and the same Udah/Belum auto-close.
+
+## Room jebakan (honeypot)
+`honeypot.py`. Anyone who posts in `HONEYPOT_CHANNEL_ID` is removed automatically (default softban: kicked and their messages from the last `HONEYPOT_DELETE_HOURS` deleted in every channel). Staff and bots are never punished. Actions are logged to `HONEYPOT_LOG_CHANNEL_ID` (or `ARCHIVE_CHANNEL_ID`). Needs the **Ban Members** permission (or Kick Members in `kick` mode).
