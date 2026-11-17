@@ -44,23 +44,24 @@ def _is_staff(member: discord.Member) -> bool:
     return bool(STAFF_ROLE_ID and any(r.id == STAFF_ROLE_ID for r in member.roles))
 
 
+CHANNEL_TOPIC = ("Channel keamanan. Jangan chat di sini: kirim pesan apa pun di channel ini "
+                 "otomatis bikin kamu dikeluarkan dari server.")
+
+
 def warning_embed() -> discord.Embed:
     e = discord.Embed(
-        title="⚠️ Room Jebakan: Jangan Chat di Sini",
+        title="⚠️ Channel Terlarang: Penindakan Otomatis",
         description=(
-            "**Kirim pesan apa pun di room ini = otomatis dikeluarkan dari server.**\n\n"
-            "Room ini bagian dari sistem keamanan NusaKlip, buat nangkep akun yang dibajak "
-            "lalu nyebar link phishing atau file scam ke semua room.\n\n"
-            "Tindakannya langsung dijalankan bot, tanpa dicek staff dulu. Semua pesan dari akun "
-            "itu di room lain juga ikut dihapus.\n\n"
-            "Kalau akun kamu sempat dibajak dan kekeluar: amankan dulu akunnya (ganti password, "
-            "nyalain 2FA, hapus aplikasi yang nggak dikenal di Settings → Authorized Apps), "
-            "baru join lagi.\n\n"
+            "**Kirim pesan apa pun di channel ini akan langsung membuat kamu dikeluarkan dari server.**\n\n"
+            "Channel ini bagian dari sistem keamanan server kami, dibuat untuk mendeteksi akun yang "
+            "dibajak lalu dipakai mengirim spam ke semua channel.\n\n"
+            "Tindakan dijalankan langsung oleh bot. Staff tidak mengecek terlebih dahulu.\n\n"
+            "Kalau akun kamu sempat dibajak dan dikeluarkan, amankan dulu akun kamu (ganti password, "
+            "aktifkan 2FA, hapus aplikasi yang tidak dikenal di Authorized Apps) sebelum menghubungi staff.\n\n"
             "**Jangan chat di sini dengan alasan apa pun.**"
         ),
         color=0xE74C3C,
     )
-    e.set_footer(text="NusaKlip • Sistem keamanan otomatis")
     return e
 
 
@@ -142,7 +143,12 @@ async def honeypot_pasang(interaction: discord.Interaction):
         await interaction.response.send_message("HONEYPOT_CHANNEL_ID belum diset di Railway.", ephemeral=True)
         return
     await ch.send(embed=warning_embed())
-    await interaction.response.send_message(f"Peringatan udah dipasang di {ch.mention}.", ephemeral=True)
+    note = ""
+    try:
+        await ch.edit(topic=CHANNEL_TOPIC, reason="Honeypot: deskripsi channel")
+    except discord.HTTPException:
+        note = " (Deskripsi channel nggak bisa diganti: kasih NusaKlip AI izin Manage Channel di channel itu.)"
+    await interaction.response.send_message(f"Peringatan udah dipasang di {ch.mention}.{note}", ephemeral=True)
 
 
 @honeypot.command(name="cek", description="Cek setup room jebakan")
