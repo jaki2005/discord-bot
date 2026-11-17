@@ -44,21 +44,21 @@ def _is_staff(member: discord.Member) -> bool:
     return bool(STAFF_ROLE_ID and any(r.id == STAFF_ROLE_ID for r in member.roles))
 
 
-CHANNEL_TOPIC = ("Channel keamanan. Jangan chat di sini: kirim pesan apa pun di channel ini "
-                 "otomatis bikin kamu dikeluarkan dari server.")
+CHANNEL_TOPIC = "⚠️ Jangan chat di sini. Sekali kirim pesan, langsung dikeluarin dari server otomatis."
 
 
 def warning_embed() -> discord.Embed:
     e = discord.Embed(
-        title="⚠️ Channel Terlarang: Penindakan Otomatis",
+        title="⚠️ Jangan Chat di Sini Ya!",
         description=(
-            "**Kirim pesan apa pun di channel ini akan langsung membuat kamu dikeluarkan dari server.**\n\n"
-            "Channel ini bagian dari sistem keamanan server kami, dibuat untuk mendeteksi akun yang "
-            "dibajak lalu dipakai mengirim spam ke semua channel.\n\n"
-            "Tindakan dijalankan langsung oleh bot. Staff tidak mengecek terlebih dahulu.\n\n"
-            "Kalau akun kamu sempat dibajak dan dikeluarkan, amankan dulu akun kamu (ganti password, "
-            "aktifkan 2FA, hapus aplikasi yang tidak dikenal di Authorized Apps) sebelum menghubungi staff.\n\n"
-            "**Jangan chat di sini dengan alasan apa pun.**"
+            "**Sekali kirim pesan di channel ini, kamu langsung dikeluarin dari server.**\n\n"
+            "Channel ini jebakan buat akun yang dibajak. Biasanya akun kayak gitu nyebar link "
+            "phishing atau file scam ke semua channel, dan bakal langsung ketangkep di sini.\n\n"
+            "Yang ngeluarin itu bot, otomatis, nggak dicek staff dulu. Jadi jangan iseng nyoba ya 🙏\n\n"
+            "Kalau akun kamu sempat dibajak dan kekeluar, amanin dulu akunnya: ganti password, "
+            "nyalain 2FA, terus hapus aplikasi yang nggak kamu kenal di Authorized Apps. "
+            "Habis itu kamu boleh join lagi.\n\n"
+            "**Intinya: jangan chat di sini, apa pun alasannya.**"
         ),
         color=0xE74C3C,
     )
