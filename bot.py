@@ -338,10 +338,12 @@ if __name__ == "__main__":
     import consult  # Konsultasi Akses: support tickets with Udah/Belum auto-close
     import renewal  # Masa aktif + perpanjang: reminders, Alumni role, renewal rooms
     import booking  # Booking 1-on-1 tickets for Mentoring members (coach role)
+    import say  # /kirim and /edit-pesan: staff post as NusaKlip AI
 
     archive.setup(bot)
     purchase.setup(bot)
     consult.setup(bot)
     renewal.setup(bot)
     booking.setup(bot)
+    say.setup(bot)
     bot.run(BOT_TOKEN)
