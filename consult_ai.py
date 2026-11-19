@@ -4,8 +4,9 @@ AI sales assistant inside Konsultasi Akses tickets (Claude via the Anthropic API
   Needs ANTHROPIC_API_KEY. Without it the module stays off and tickets work as before.
 
   - Replies to the ticket owner a few seconds after they stop typing (messages are batched).
-  - Pauses itself as soon as a staff member writes in the ticket (human took over).
-    /konsultasi ai status:nyala|mati inside a ticket turns it back on or off.
+  - Keeps running when staff write in the ticket (it reads their messages for context).
+    Set AI_PAUSE_ON_STAFF=true to pause it instead as soon as staff write.
+    /konsultasi ai status:nyala|mati inside a ticket turns it on or off (only staff see the reply).
   - When the model ends a reply with [[ADMIN]], the marker is removed and the staff role is
     tagged (once per 30 minutes per ticket).
   - Cost caps: AI_MAX_REPLIES_PER_TICKET and AI_DAILY_LIMIT.
@@ -32,6 +33,7 @@ ENABLED = bool(API_KEY) and os.getenv("AI_ENABLED", "true").strip().lower() != "
 MAX_PER_TICKET = int(os.getenv("AI_MAX_REPLIES_PER_TICKET", "25"))
 DAILY_LIMIT = int(os.getenv("AI_DAILY_LIMIT", "300"))
 DEBOUNCE_SECONDS = float(os.getenv("AI_DEBOUNCE_SECONDS", "6"))
+PAUSE_ON_STAFF = os.getenv("AI_PAUSE_ON_STAFF", "false").strip().lower() == "true"
 HISTORY_LIMIT = 40
 ADMIN_TOKEN = "[[ADMIN]]"
 PING_COOLDOWN = 30 * 60
@@ -132,7 +134,11 @@ async def _state(ch: discord.TextChannel, owner_id: int):
             history.append(("user", m.content or "", [a for a in m.attachments
                                                       if (a.content_type or "").startswith("image/")]))
         elif not m.author.bot and isinstance(m.author, discord.Member) and C.is_staff(m.author):
-            events.append((ts, True))  # a human took over
+            if PAUSE_ON_STAFF:
+                events.append((ts, True))  # a human took over
+            elif m.content:
+                # AI keeps running; it sees what the admin said so it stays consistent with it
+                history.append(("assistant", f"(Admin {m.author.display_name} menjawab:) {m.content}", []))
     paused = max(events)[1] if events else False
     return paused, ai_count, history
 
