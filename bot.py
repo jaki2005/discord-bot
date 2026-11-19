@@ -340,6 +340,7 @@ if __name__ == "__main__":
     import booking  # Booking 1-on-1 tickets for Mentoring members (coach role)
     import say  # /kirim and /edit-pesan: staff post as NusaKlip AI
     import honeypot  # room jebakan: auto-remove compromised accounts that post there
+    import consult_ai  # AI sales assistant in Konsultasi Akses tickets (needs ANTHROPIC_API_KEY)
 
     archive.setup(bot)
     purchase.setup(bot)
@@ -348,4 +349,5 @@ if __name__ == "__main__":
     booking.setup(bot)
     say.setup(bot)
     honeypot.setup(bot)
+    consult_ai.setup(bot)
     bot.run(BOT_TOKEN)

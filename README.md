@@ -72,3 +72,6 @@ Same engine as Booking 1-on-1 (`booking.py`, kind `bantuan`). Run `/bantuan pane
 
 ## Room jebakan (honeypot)
 `honeypot.py`. Anyone who posts in `HONEYPOT_CHANNEL_ID` is removed automatically (default softban: kicked and their messages from the last `HONEYPOT_DELETE_HOURS` deleted in every channel). Staff and bots are never punished. Actions are logged to `HONEYPOT_LOG_CHANNEL_ID` (or `ARCHIVE_CHANNEL_ID`). Needs the **Ban Members** permission (or Kick Members in `kick` mode).
+
+## AI sales assistant (Konsultasi Akses)
+`consult_ai.py` + `ai_sales_prompt.md`. With `ANTHROPIC_API_KEY` set, Claude answers the ticket owner in Konsultasi Akses tickets (batched after `AI_DEBOUNCE_SECONDS`), using the NusaKlip knowledge and sales rules in `ai_sales_prompt.md`. It pauses as soon as staff write in the ticket; `/konsultasi ai status:nyala|mati` toggles it. A reply ending in `[[ADMIN]]` tags the staff role. Caps: `AI_MAX_REPLIES_PER_TICKET`, `AI_DAILY_LIMIT`. Model: `AI_MODEL`.

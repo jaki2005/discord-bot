@@ -233,6 +233,9 @@ class PanelView(LoggedView):
                 "• Ada **kendala teknis**? Jelasin masalahnya dan sertakan screenshot.\n"
                 "• Soal **pembayaran**? Sertakan screenshot bukti bayarnya.\n\n"
                 "Kalau udah beres, klik **Selesai, tutup ticket**."
+                + ("\n\n🤖 Asisten AI NusaKlip bakal bantu jawab duluan, tim admin juga bisa nimbrung."
+                   if os.getenv("ANTHROPIC_API_KEY", "").strip()
+                   and os.getenv("AI_ENABLED", "true").strip().lower() != "false" else "")
             ),
             color=COLOR,
         )
