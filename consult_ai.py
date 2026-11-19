@@ -18,6 +18,7 @@ import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
 import discord
@@ -89,18 +90,41 @@ def _is_ai_text(msg: discord.Message) -> bool:
         and C.IRRELEVANT_MARKER not in msg.content
 
 
+def _toggle_from_url(url):
+    """The ticket header embed URL may carry ai=on|off and at=<unix time> (set by /konsultasi ai)."""
+    q = parse_qs(urlparse(url or "").query)
+    try:
+        return q["ai"][0], float(q["at"][0])
+    except (KeyError, ValueError, IndexError):
+        return None, 0.0
+
+
+async def _header(ch: discord.TextChannel):
+    async for msg in ch.history(limit=10, oldest_first=True):
+        if msg.author.id == ch.guild.me.id and msg.embeds and C.ticket_owner_from_url(msg.embeds[0].url):
+            return msg
+    return None
+
+
 async def _state(ch: discord.TextChannel, owner_id: int):
     """Return (paused, ai_reply_count, history) from the channel, oldest first."""
     msgs = [m async for m in ch.history(limit=HISTORY_LIMIT)]
     msgs.reverse()
-    paused, ai_count, history = False, 0, []
+    ai_count, history = 0, []
+    events = []  # (unix time, paused?) ; the newest event decides
     me = ch.guild.me.id
+    header = await _header(ch)
+    if header:
+        mode, at = _toggle_from_url(header.embeds[0].url)
+        if mode in ("on", "off"):
+            events.append((at, mode == "off"))
     for m in msgs:
+        ts = m.created_at.timestamp()
         if m.author.id == me:
-            if m.content.startswith(MARK_OFF):
-                paused = True
+            if m.content.startswith(MARK_OFF):  # older tickets toggled with a visible message
+                events.append((ts, True))
             elif m.content.startswith(MARK_ON):
-                paused = False
+                events.append((ts, False))
             elif _is_ai_text(m):
                 ai_count += 1
                 history.append(("assistant", m.content.replace(AI_FOOTER, "").strip(), []))
@@ -108,7 +132,8 @@ async def _state(ch: discord.TextChannel, owner_id: int):
             history.append(("user", m.content or "", [a for a in m.attachments
                                                       if (a.content_type or "").startswith("image/")]))
         elif not m.author.bot and isinstance(m.author, discord.Member) and C.is_staff(m.author):
-            paused = True  # a human took over
+            events.append((ts, True))  # a human took over
+    paused = max(events)[1] if events else False
     return paused, ai_count, history
 
 
@@ -243,7 +268,20 @@ async def ai_toggle(interaction: discord.Interaction, status: app_commands.Choic
         await interaction.response.send_message("Asisten AI belum aktif (ANTHROPIC_API_KEY belum diisi).",
                                                 ephemeral=True)
         return
-    await interaction.response.send_message(MARK_ON if status.value == "on" else MARK_OFF)
+    header = await _header(interaction.channel)
+    if not header:
+        await interaction.response.send_message("Pesan pembuka ticket nggak ketemu, jadi status AI nggak bisa diubah.",
+                                                ephemeral=True)
+        return
+    embed = header.embeds[0]
+    u = urlparse(embed.url)
+    q = {k: v[0] for k, v in parse_qs(u.query).items()}
+    q.update(ai=status.value, at=str(int(time.time()) + 1))
+    embed.url = urlunparse(u._replace(query=urlencode(q)))
+    await header.edit(embed=embed)  # saved silently in the ticket header, nothing posted in the chat
+    await interaction.response.send_message(
+        "🤖 Asisten AI " + ("dinyalain lagi" if status.value == "on" else "dimatiin") + " di ticket ini. "
+        "Cuma kamu yang lihat pesan ini.", ephemeral=True)
 
 
 def setup(bot) -> None:
