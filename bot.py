@@ -350,4 +350,15 @@ if __name__ == "__main__":
     say.setup(bot)
     honeypot.setup(bot)
     consult_ai.setup(bot)
-    bot.run(BOT_TOKEN)
+    try:
+        bot.run(BOT_TOKEN)
+    except discord.HTTPException as e:
+        if e.status != 429:
+            raise
+        # Discord/Cloudflare temporarily blocked this server's IP. Restarting right away
+        # keeps the block going, so wait before exiting and letting Railway restart us.
+        wait = int(os.getenv("RATE_LIMIT_BACKOFF_SECONDS", "900"))
+        print(f"[startup] Discord rate limited this server (429). Waiting {wait}s before restart.", flush=True)
+        import time
+        time.sleep(wait)
+        raise SystemExit(1)
