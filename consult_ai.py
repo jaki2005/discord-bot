@@ -35,6 +35,7 @@ DAILY_LIMIT = int(os.getenv("AI_DAILY_LIMIT", "300"))
 DEBOUNCE_SECONDS = float(os.getenv("AI_DEBOUNCE_SECONDS", "6"))
 PAUSE_ON_STAFF = os.getenv("AI_PAUSE_ON_STAFF", "false").strip().lower() == "true"
 HISTORY_LIMIT = 40
+MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "400"))
 ADMIN_TOKEN = "[[ADMIN]]"
 PING_COOLDOWN = 30 * 60
 
@@ -51,23 +52,22 @@ _last_admin_ping: dict[int, float] = {}
 _day = {"date": None, "count": 0}
 
 
-def _ref(env: str, name: str) -> str:
-    v = os.getenv(env, "").strip()
+def _ref(env: str, name: str, default: str = "") -> str:
+    v = os.getenv(env, "").strip() or default
     return f"<#{v}>" if v else f"#{name}"
 
 
 def system_prompt() -> str:
     text = PROMPT_FILE.read_text(encoding="utf-8")
     refs = {
-        "blueprint_ch": _ref("BLUEPRINT_CHANNEL_ID", "full-clipping-blueprint"),
-        "mentoring_ch": _ref("MENTORING_CHANNEL_ID", "mentoring-ekslusif"),
+        "blueprint_ch": _ref("BLUEPRINT_CHANNEL_ID", "full-clipping-blueprint", "1509072043516235796"),
+        "mentoring_ch": _ref("MENTORING_CHANNEL_ID", "mentoring-ekslusif", "1560280519827136643"),
         "renew_ch": _ref("RENEW_CHANNEL_ID", "perpanjang-akses"),
-        "booking_ch": _ref("BOOKING_CHANNEL_ID", "booking-1on1"),
         "help_ch": _ref("HELP_CHANNEL_ID", "bantuan"),
         "guide_ch": _ref("GUIDE_CHANNEL_ID", "panduan-gratis-content-rewards"),
         "content_rewards_ch": _ref("CONTENT_REWARDS_CHANNEL_ID", "daftar-content-rewards"),
         "diskusi_ch": _ref("WELCOME_CHANNEL_ID", "diskusi-clipper"),
-        "member_win": _ref("MEMBER_WIN_CHANNEL_ID", "member-win-nusaclippers"),
+        "member_win": _ref("MEMBER_WIN_CHANNEL_ID", "member-win-nusaclippers", "1560297872828801104"),
     }
     for k, v in refs.items():
         text = text.replace("{" + k + "}", v)
@@ -178,7 +178,7 @@ def _strip_images(messages):
 
 async def _ask(messages) -> str:
     kwargs = dict(
-        model=MODEL, max_tokens=600,
+        model=MODEL, max_tokens=MAX_TOKENS,
         system=[{"type": "text", "text": system_prompt(), "cache_control": {"type": "ephemeral"}}],
         messages=messages,
     )
@@ -194,7 +194,16 @@ async def _ask(messages) -> str:
     u = resp.usage
     print(f"[consult-ai] {MODEL} in={u.input_tokens} cache_read={getattr(u, 'cache_read_input_tokens', 0)} "
           f"out={u.output_tokens}", flush=True)
-    return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
+    text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
+    if getattr(resp, "stop_reason", "") == "max_tokens":
+        text = _trim_to_sentence(text)
+    return text
+
+
+def _trim_to_sentence(text: str) -> str:
+    """Drop a half-written last sentence when the reply hit the token limit."""
+    cut = max(text.rfind(c) for c in (".", "?", "!", "\n"))
+    return text[:cut + 1].strip() if cut > len(text) // 3 else text
 
 
 def _under_daily_limit() -> bool:
